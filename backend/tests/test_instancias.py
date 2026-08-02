@@ -50,7 +50,10 @@ def servicios_falsos(inventario):
     def editar_cliente(slug, nombre, domain):
         if slug not in ("acme", "beta"):
             raise ServiceErrorFalso(f"Instancia '{slug}' no encontrada.")
-        return {"slug": slug, "nombre": nombre, "domain": domain}
+        # El motor devuelve el `cliente.json` entero, con la contraseña adentro.
+        return {"slug": slug, "nombre": nombre, "domain": domain,
+                "admin_user": "admin", "admin_password": "la-de-la-instancia",
+                "plan": "pro", "port": 8081}
 
     def set_plan(slug, plan):
         if plan not in ("basico", "pro"):
@@ -132,6 +135,21 @@ def test_alta_duplicada_es_422(admin):
 def test_editar(admin):
     resp = admin.put("/api/instancias/acme", json={"nombre": "ACME SRL", "domain": "acme.test"})
     assert resp.json()["nombre"] == "ACME SRL"
+
+
+def test_la_edicion_no_devuelve_la_password_de_la_instancia(admin):
+    """`editar_cliente` devuelve el `cliente.json` entero y ahí viaja
+    `admin_password` en claro. Guardar un formulario que sólo cambia el nombre
+    no puede mandarle la contraseña del admin al navegador.
+
+    No es hipotético: el 2026-08-02 esa respuesta quedó impresa en un
+    transcript durante la verificación en el VPS y hubo que rotar la
+    contraseña de la instancia."""
+    cuerpo = admin.put(
+        "/api/instancias/acme", json={"nombre": "ACME SRL", "domain": "acme.test"}
+    ).json()
+    assert "admin_password" not in cuerpo
+    assert cuerpo["admin_user"] == "admin"
 
 
 def test_plan_invalido(admin):

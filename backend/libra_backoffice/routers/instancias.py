@@ -69,13 +69,14 @@ class BajaIn(BaseModel):
     hacer_backup: bool = True
 
 
-class InstanciaCreada(BaseModel):
-    """Lo que devuelve el alta.
+class InstanciaEditada(BaseModel):
+    """Lo que devuelve la edición: el `cliente.json` **filtrado**.
 
-    `admin_password` importa: si el alta se pidió sin contraseña, el motor
-    **genera una** y esta respuesta es la única vez que la UI la ve. Queda
-    también en `clientes/<slug>/cliente.json` del host, que es el único lugar
-    donde recuperarla si el navegador nunca llegó a ver esta respuesta.
+    `editar_cliente` devuelve la metadata entera, y ahí adentro viaja
+    `admin_password` en claro. Sin este `response_model` la contraseña del admin
+    de la instancia sale al navegador —y a cualquier log intermedio— en cada
+    guardado de un formulario que sólo cambia el nombre y el dominio. Pasó de
+    verdad el 2026-08-02: quedó impresa en un transcript y hubo que rotarla.
     """
 
     slug: str
@@ -84,8 +85,20 @@ class InstanciaCreada(BaseModel):
     port: int | str = ""
     container: str = ""
     admin_user: str = ""
-    admin_password: str = ""
     plan: str = ""
+
+
+class InstanciaCreada(InstanciaEditada):
+    """Lo que devuelve el alta.
+
+    Es la edición **más** `admin_password`, y esa diferencia es deliberada: si
+    el alta se pidió sin contraseña, el motor genera una y esta respuesta es la
+    única vez que la UI la ve. Queda también en `clientes/<slug>/cliente.json`
+    del host, que es el único lugar donde recuperarla si el navegador nunca
+    llegó a ver esta respuesta.
+    """
+
+    admin_password: str = ""
     # `None` = no se intentó (sin dominio, o NPM no configurado). `False` = se
     # intentó y falló: el cliente existe pero su dominio no resuelve todavía.
     proxy_ok: bool | None = None
@@ -110,7 +123,7 @@ def crear(datos: InstanciaIn, request: Request):
         raise HTTPException(422, str(exc))
 
 
-@router.put("/instancias/{slug}")
+@router.put("/instancias/{slug}", response_model=InstanciaEditada)
 def editar(slug: str, datos: InstanciaEdit, request: Request):
     servicios = _servicios(request)
     try:
