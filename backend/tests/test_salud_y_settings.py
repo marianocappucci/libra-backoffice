@@ -89,7 +89,16 @@ def test_settings_completo():
     assert s.product_name == "Gestiolibra"
     assert s.users_path == "/api/usuarios"
     assert s.smtp_path == "/admin/smtp"
+    assert s.health_path == "/health"
     assert s.features_por_instancia == ["smtp", "usuarios"]
+
+
+def test_health_path_configurable():
+    """LibraDesk sirve su health en `/api/health`. Con el default, el chequeo
+    caía en el fallback de su SPA y devolvía 200 con HTML — un 'ok' que no
+    había tocado la app."""
+    s = cargar_settings({**BASE, "HEALTH_PATH": "/api/health"})
+    assert s.health_path == "/api/health"
 
 
 def test_falta_product_slug():

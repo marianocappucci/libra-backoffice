@@ -62,6 +62,46 @@ async def test_una_instancia_que_devuelve_texto_plano(anyio_backend):
 
 
 @pytest.mark.anyio
+async def test_un_200_que_no_es_json_no_se_lee_como_exito(anyio_backend):
+    """El caso que rompio en produccion con LibraDesk.
+
+    Los productos de la familia sirven una SPA con fallback, asi que CUALQUIER
+    ruta que no exista devuelve 200 con HTML. Con un `resp.json()` a secas eso
+    salia como un 500 del backoffice, y el mensaje no decia nada del path mal
+    configurado.
+    """
+    app = FastAPI()
+
+    @app.get("/{ruta:path}")
+    def spa(ruta: str):
+        return PlainTextResponse("<!doctype html><div id=root></div>")
+
+    cliente = ClienteInstancia(token=TOKEN, transport=_TransporteDeInstancias({"prod-x": app}))
+    instancia = Instancia(slug="x", nombre="X", container="prod-x")
+
+    with pytest.raises(RespuestaDeInstancia) as exc:
+        await cliente.pedir("GET", instancia, "/ruta/que/no/existe")
+    assert "no es JSON" in exc.value.detalle
+    assert "HEALTH_PATH" in exc.value.detalle
+
+
+@pytest.mark.anyio
+async def test_el_chequeo_de_salud_no_exige_json(anyio_backend):
+    """`/health` de algunos productos no devuelve JSON, y ahi solo importa el
+    codigo de estado."""
+    app = FastAPI()
+
+    @app.get("/api/health")
+    def health():
+        return PlainTextResponse("ok")
+
+    cliente = ClienteInstancia(token=TOKEN, transport=_TransporteDeInstancias({"prod-x": app}))
+    instancia = Instancia(slug="x", nombre="X", container="prod-x")
+
+    assert await cliente.pedir("GET", instancia, "/api/health", esperar_json=False) is None
+
+
+@pytest.mark.anyio
 async def test_un_contenedor_que_no_existe(anyio_backend):
     cliente = ClienteInstancia(token=TOKEN, transport=_TransporteDeInstancias({}))
     instancia = Instancia(slug="x", nombre="X", container="no-existe")

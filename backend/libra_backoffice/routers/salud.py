@@ -32,12 +32,14 @@ router = APIRouter(
 _ARRANQUE = time.time()
 
 
-async def _estado_de(cliente, instancia) -> dict:
+async def _estado_de(cliente, instancia, health_path: str) -> dict:
     base = {"slug": instancia.slug, "nombre": instancia.nombre, "container": instancia.container}
     if not instancia.container:
         return {**base, "estado": "sin contenedor", "detalle": "El compose no declara container_name."}
     try:
-        await cliente.pedir("GET", instancia, "/health")
+        # `esperar_json=False`: acá sólo importa el código de estado, y el
+        # /health de los productos no siempre devuelve JSON.
+        await cliente.pedir("GET", instancia, health_path, esperar_json=False)
     except InstanciaInalcanzable as exc:
         return {**base, "estado": "inalcanzable", "detalle": exc.detalle}
     except RespuestaDeInstancia as exc:
@@ -51,7 +53,9 @@ async def salud(request: Request):
     cliente = request.app.state.cliente_instancia
 
     instancias = request.app.state.inventario.listar()
-    estados = await asyncio.gather(*(_estado_de(cliente, i) for i in instancias))
+    estados = await asyncio.gather(
+        *(_estado_de(cliente, i, settings.health_path) for i in instancias)
+    )
 
     return {
         "producto": {"slug": settings.product_slug, "nombre": settings.product_name},

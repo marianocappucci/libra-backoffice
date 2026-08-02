@@ -47,13 +47,20 @@ class ClienteInstancia:
     def url(self, instancia, path: str) -> str:
         return f"http://{instancia.container}:{self._puerto}{path}"
 
-    async def pedir(self, metodo: str, instancia, path: str, json=None):
+    async def pedir(self, metodo: str, instancia, path: str, json=None, esperar_json: bool = True):
         """Devuelve el JSON de la instancia, o traduce el fallo.
 
         Un timeout o un DNS que no resuelve **no** son un 500 del backoffice:
         son "esa instancia está caída", que es información y no una falla. El
         router lo convierte en 502 con el slug adentro, para que la pantalla
         pueda decir cuál.
+
+        `esperar_json=False` para los chequeos donde sólo importa el código de
+        estado. No es un detalle: los productos de esta familia sirven una SPA
+        con fallback, así que **cualquier ruta que no exista devuelve 200 con
+        HTML**. Con `esperar_json=True` eso reventaba en `resp.json()` y salía
+        como un 500 del backoffice; peor todavía, si el cuerpo hubiera sido
+        JSON el chequeo habría dado "ok" sin haber tocado la app.
         """
         url = self.url(instancia, path)
         try:
@@ -66,7 +73,20 @@ class ClienteInstancia:
 
         if resp.status_code >= 400:
             raise RespuestaDeInstancia(resp.status_code, _detalle(resp))
-        return resp.json()
+        if not esperar_json:
+            return None
+        try:
+            return resp.json()
+        except ValueError:
+            # 200 con un cuerpo que no es JSON: casi siempre es el fallback de
+            # la SPA respondiendo por una ruta que no existe, o sea que el path
+            # configurado para este producto está mal.
+            raise RespuestaDeInstancia(
+                resp.status_code,
+                f"La instancia contestó 200 pero el cuerpo no es JSON en {path!r}. "
+                "Suele ser el fallback de la SPA: revisar SMTP_PATH/USERS_PATH/"
+                "HEALTH_PATH para este producto.",
+            )
 
 
 def _detalle(resp: httpx.Response) -> str:

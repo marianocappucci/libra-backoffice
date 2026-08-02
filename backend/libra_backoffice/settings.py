@@ -40,6 +40,10 @@ class Settings:
     instancia_puerto: int = 8000
     smtp_path: str = "/admin/smtp"
     users_path: str = "/users"
+    # LibraDesk sirve su health en `/api/health`. Con el default, el chequeo de
+    # salud caía en el fallback de la SPA y devolvía 200 con HTML: un "ok" que
+    # no había tocado la app.
+    health_path: str = "/health"
     service_token: str = ""
     timeout_instancia: float = 5.0
 
@@ -114,6 +118,7 @@ def cargar_settings(env: dict | None = None) -> Settings:
         instancia_puerto=int(env.get("INSTANCIA_PUERTO") or 8000),
         smtp_path=(env.get("SMTP_PATH") or "/admin/smtp").strip(),
         users_path=(env.get("USERS_PATH") or "/users").strip(),
+        health_path=(env.get("HEALTH_PATH") or "/health").strip(),
         service_token=token,
         timeout_instancia=float(env.get("TIMEOUT_INSTANCIA") or 5.0),
     )
