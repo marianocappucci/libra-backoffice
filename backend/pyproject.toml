@@ -9,16 +9,19 @@ description = "Backoffice de superadmin compartido por los 6 productos de la fam
 requires-python = ">=3.12"
 license = { text = "Proprietary" }
 dependencies = [
-    # `AdminAuth` (sesion del superadmin), `SmtpSettingsRepository` (config SMTP
-    # cifrada) y `UserRepository` (ABM de usuarios de la instancia).
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.6.2",
-    # `admin.services` (gestion de instancias de cliente, feature `clientes`) y
+    # `AdminAuth` (sesion del superadmin del backoffice) y el guard de token de
+    # servicio (v0.7.0), que es lo que permite administrar N instancias sin ser
+    # usuario de ninguna.
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.7.0",
+    # `admin.services` (inventario y ciclo de vida de instancias) y
     # `security_headers`.
     "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.2.0",
     "fastapi>=0.111,<1",
     "uvicorn[standard]>=0.30,<1",
-    "sqlalchemy>=2,<3",
+    # El control plane le habla a cada instancia por HTTP.
     "httpx>=0.27,<1",
+    # Backend `compose` del inventario: leer `clientes/<slug>/docker-compose.yml`.
+    "pyyaml>=6,<7",
 ]
 
 [project.optional-dependencies]
@@ -26,6 +29,10 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=6",
     "ruff>=0.13",
+    # Trae el plugin de pytest que corre los tests `async def`. Sin el, los
+    # tests del cliente HTTP se saltearian con un warning y la suite quedaria
+    # en verde sin haberlos ejecutado.
+    "anyio>=4",
 ]
 
 [tool.hatch.build.targets.wheel]

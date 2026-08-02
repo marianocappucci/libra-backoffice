@@ -12,25 +12,55 @@ seis aplicaciones que mantener sincronizadas — que es el problema que
 
 Cada despliegue vive en `admin.<producto>.com.ar`.
 
-## Qué hace
+## Es un control plane
 
-| Feature | Qué es | Quién la tiene |
+**Los seis productos son multi-instancia.** Cada uno corre N contenedores de
+cliente bajo `clientes/<slug>/`, y el backoffice los administra a todos.
+
+Eso obliga a una distinción que es el corazón del diseño:
+
+| Plano | Cómo llega | Qué resuelve |
 |---|---|---|
-| `smtp` | Correo saliente de la instancia (host, cuenta, remitente), con la contraseña cifrada en reposo | los seis |
-| `usuarios` | ABM de los usuarios del producto, con baja lógica | los seis |
-| `salud` | Versión y arranque del backoffice + si la instancia del producto contesta | los seis |
-| `clientes` | Alta, plan, ciclo de vida, backup y baja de instancias de cliente | Contalibra y Restolibra |
+| **Instancias** | Filesystem + Docker del host, vía `libracore.admin.services` | listar, alta, plan, start/stop, backup, baja |
+| **Configuración** | HTTP contra la API de cada instancia | correo saliente, usuarios |
 
-Se declaran por entorno: `FEATURES=smtp,usuarios,salud`.
+> **Por qué el segundo plano va por HTTP y no abriendo la base de cada
+> instancia**, que fue el primer diseño y se descartó: la contraseña SMTP se
+> cifra con una clave derivada del `SECRET_KEY` **de la instancia**, y
+> `libraauth.crypto` la lee del entorno del proceso. Un backoffice que
+> administra N instancias no puede tener N secretos en un solo entorno. Si
+> escribiera igual, cifraría con su clave y la instancia leería después
+> `password_indescifrable`: el correo quedaría roto **sin que nada falle a la
+> vista**. Hablando por HTTP, cada instancia sigue cifrando con su propia clave
+> en su propio proceso y el problema no existe.
+
+La autenticación entre backoffice e instancia es el token de servicio de
+`libraauth v0.7.0` (`X-Internal-Auth`), que viaja por la red interna de Docker
+y nunca sale a internet.
+
+## Features
+
+| Feature | Qué es | Plano |
+|---|---|---|
+| `instancias` | Inventario y ciclo de vida de los contenedores de cliente | host |
+| `smtp` | Correo saliente **de una instancia**, con la contraseña cifrada en reposo | HTTP |
+| `usuarios` | Usuarios **de una instancia**, con baja lógica | HTTP |
+| `salud` | Versión y arranque del backoffice + qué instancias contestan | ambos |
+
+Se declaran por entorno: `FEATURES=instancias,smtp,usuarios,salud`.
+
+`INSTANCIAS_BACKEND` elige cómo se enumeran: `libracore` (cinco productos, con
+`cliente.json` y planes) o `compose` (LibraDesk, que despliega con
+`deploy_cliente.sh` y sólo tiene `docker-compose.yml` por instancia — ahí el
+backoffice lista pero no opera, y las rutas de ciclo de vida contestan `501`).
 
 ## Qué reusa
 
-Casi todo. Lo genuinamente nuevo de este repo es el ensamblado.
+Casi todo. Lo genuinamente nuevo de este repo es el ensamblado y el proxy.
 
 - **`libraauth`** — `AdminAuth` (sesión del superadmin, credenciales por
-  entorno, cookie propia, rate limiting), `SmtpSettingsRepository` (cifrado y
-  precedencia base-sobre-entorno) y `UserRepository`.
-- **`libracore`** — `admin.services` (gestión de instancias, que a su vez
+  entorno, cookie propia, rate limiting) y el guard de token de servicio.
+- **`libracore`** — `admin.services` (inventario y ciclo de vida, que a su vez
   envuelve los scripts del repo de cada producto) y `security_headers`.
 - **`libra-ui`** — `Layout`, `Login`, `Usuarios`, `data-table`, `AuthContext`,
   `api-client` y `ConfiguracionSmtp`. Este repo es el **primer consumidor** de
@@ -64,19 +94,24 @@ cd frontend && npm install && npm run build
 | `FEATURES` | sí | Lista separada por comas. Un valor desconocido **no arranca**. |
 | `ADMIN_PANEL_USER` / `ADMIN_PANEL_PASSWORD` | sí | Credenciales del superadmin. Sin password, se rechaza todo login. |
 | `SECRET_KEY` | sí | Firma la cookie de sesión **de este backoffice**. |
-| `LIBRAAUTH_ENCRYPTION_KEY` | con `smtp` | **Tiene que valer lo mismo que el `SECRET_KEY` de la instancia del producto.** Ver abajo. |
-| `AUTH_DB_PATH` | con `smtp`/`usuarios` | Base de la instancia donde libraauth tiene sus tablas. |
-| `REPO_ROOT` / `DB_FILENAME` | con `clientes` | Checkout del producto en el host y nombre del archivo de base de cada instancia. |
-| `PRODUCT_HEALTH_URL` | no | A quién preguntarle si el producto está vivo. |
+| `REPO_ROOT` | sí | Checkout del producto en el host, donde vive `clientes/`. |
+| `INSTANCIAS_BACKEND` | no | `libracore` (default) o `compose`. |
+| `DB_FILENAME` | con `libracore` | Nombre del archivo de base de cada instancia (`contalibra.db`). |
+| `LIBRA_SERVICE_TOKEN` | con `smtp`/`usuarios` | El mismo valor que tienen seteado las instancias de este producto. |
+| `SMTP_PATH` | no | Default `/admin/smtp`. Contalibra y Restolibra usan `/api/config/smtp`. |
+| `USERS_PATH` | no | Default `/users`. LibraDesk usa `/api/usuarios`. |
+| `INSTANCIA_PUERTO` | no | Puerto interno de las instancias. Default `8000`. |
+| `TIMEOUT_INSTANCIA` | no | Segundos. Default `5`. |
 
-> ⚠️ **`LIBRAAUTH_ENCRYPTION_KEY` no es opcional cuando hay `smtp`, y no es
-> cualquier valor.** La contraseña SMTP se guarda cifrada con una clave derivada
-> del secreto del entorno (`libraauth/crypto.py`), y acá la escribe **este**
-> proceso, no el de la instancia. Si no coincide con el `SECRET_KEY` de la
-> instancia, el backoffice guarda sin error y el producto después lee
-> `password_indescifrable`: el correo queda roto sin que nada falle a la vista.
-> No se reusa el `SECRET_KEY` del backoffice para esto — ése firma su propia
-> cookie y es un secreto distinto.
+> ⚠️ **`LIBRA_SERVICE_TOKEN` tiene que ser el mismo valor en el backoffice y en
+> todas las instancias del producto.** Es lo que autentica al backoffice contra
+> ellas. Con un valor distinto, todas las pantallas del plano de configuración
+> contestan 401. Vive en `/etc/<producto>-admin.env` (chmod 600) del lado del
+> backoffice y en el compose de cada instancia del otro.
+>
+> Una instancia **sin** la variable seteada rechaza el token y sigue
+> funcionando como antes: el guard de libraauth es opt-in por ausencia. Eso es
+> lo que permite actualizar a `v0.7.0` sin tocar ningún compose.
 
 ## Despliegue
 

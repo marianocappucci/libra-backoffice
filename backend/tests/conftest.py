@@ -1,72 +1,199 @@
 """
 Fixtures de la suite.
 
-La app se construye contra una base SQLite real en un tmp_path con las tablas
-de libraauth ya creadas — no contra mocks. Es la misma decisión que tomó
-LibraCore al testear su backoffice: lo que rompe en estos routers es la
-integración con el motor (el cifrado, la precedencia base/entorno, la
-semántica de `SIN_CAMBIOS`), y eso un doble no lo ejercita.
+La decisión que vale la pena explicar: **la "instancia" de los tests es una app
+FastAPI de verdad**, con el router real de `libraauth` y su guard real de token
+de servicio, alcanzada por un `ASGITransport`. Un doble que devolviera JSON
+plausible estaría de acuerdo con cualquier contrato, incluido uno equivocado —
+y el contrato entre el backoffice y las instancias es justamente lo que este
+proyecto está estrenando. Así, si el guard de libraauth cambia, esta suite se
+entera.
 """
-import os
-
+import httpx
 import pytest
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from libraauth.models import Base as AuthBase
+from libraauth.repository import UserRepository, UsernameTaken
+from libraauth.session_auth import (
+    SERVICE_TOKEN_ENV,
+    build_smtp_settings_router,
+    json_api_require_admin_o_servicio,
+)
+from libraauth.smtp_settings import SmtpSettingsRepository
+from pydantic import BaseModel
 from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from libra_backoffice.app import create_app
+from libra_backoffice.cliente_instancia import ClienteInstancia
+from libra_backoffice.inventario import Instancia, InstanciaDesconocida
 from libra_backoffice.settings import Settings
 
 USUARIO = "superadmin"
 PASSWORD = "una-password-de-prueba"
+TOKEN = "token-de-servicio-de-prueba"
 
 
 @pytest.fixture(autouse=True)
 def entorno(monkeypatch):
-    """Credenciales del superadmin y secretos, como los daría el `.env`.
-
-    `ENV=development` es lo que habilita el fallback de `SECRET_KEY` en
-    libraauth; sin él la app directamente no levanta, que es el comportamiento
-    correcto en producción.
-    """
     monkeypatch.setenv("ENV", "development")
     monkeypatch.setenv("ADMIN_PANEL_USER", USUARIO)
     monkeypatch.setenv("ADMIN_PANEL_PASSWORD", PASSWORD)
     monkeypatch.setenv("SECRET_KEY", "0" * 64)
-    # La clave con la que se cifra la password SMTP. En un despliegue real vale
-    # lo mismo que el SECRET_KEY de la INSTANCIA del producto, no el de acá.
-    monkeypatch.setenv("LIBRAAUTH_ENCRYPTION_KEY", "1" * 64)
+    # La instancia falsa corre en el mismo proceso, así que este es el token que
+    # su guard va a validar.
+    monkeypatch.setenv(SERVICE_TOKEN_ENV, TOKEN)
 
 
-@pytest.fixture
-def db_instancia(tmp_path):
-    """Base de la instancia del producto, con el schema de libraauth creado."""
-    ruta = tmp_path / "producto_libracore.db"
-    AuthBase.metadata.create_all(create_engine(f"sqlite:///{ruta}"))
-    return ruta
+# ── La "instancia" ──────────────────────────────────────────────────────────
+
+class _UsuarioIn(BaseModel):
+    username: str
+    name: str
+    password: str
+    role: str = "staff"
 
 
-def construir_settings(db_path, features):
-    return Settings(
-        product_slug="gestiolibra",
-        product_name="Gestiolibra",
-        features=frozenset(features),
-        auth_db_path=db_path,
-    )
+class _UsuarioUpdate(BaseModel):
+    name: str
+    role: str
+    active: bool
 
 
-@pytest.fixture
-def cliente(db_instancia):
-    """Cliente HTTP sin loguear, con las tres features de un producto nuevo.
+def construir_instancia_falsa(db_path):
+    """Una instancia de producto: router de SMTP de libraauth + router de
+    usuarios propio, que es exactamente cómo están los seis."""
+    engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
+    AuthBase.metadata.create_all(engine)
+    sesiones = sessionmaker(bind=engine)
 
-    `base_url` en **https** y no en http: `AdminAuth` marca la cookie de sesión
-    como `secure`, y el cookie jar de httpx —correctamente— no la manda de
-    vuelta por una conexión insegura. Con `http://testserver` el login
-    devolvería 200 y todas las requests siguientes 401, que parece un bug de
-    auth y es el navegador haciendo lo suyo. En producción no es un problema
-    porque NPM termina el TLS y el navegador siempre habla https.
+    app = FastAPI()
+    app.state.smtp_settings = SmtpSettingsRepository(sesiones)
+    app.state.users = UserRepository(sesiones)
+    app.state.session_auth = None  # nadie con cookie: sólo se entra por token
+
+    @app.get("/health")
+    def health():
+        return {"ok": True}
+
+    app.include_router(build_smtp_settings_router())
+
+    # El router de usuarios NO es de libraauth: cada producto tiene el suyo.
+    # Este reproduce el de los cuatro FastAPI, guard de servicio incluido.
+    from fastapi import APIRouter, Depends
+
+    usuarios = APIRouter(prefix="/users", dependencies=[Depends(json_api_require_admin_o_servicio)])
+
+    @usuarios.get("")
+    def listar():
+        return app.state.users.list()
+
+    @usuarios.post("", status_code=201)
+    def crear(datos: _UsuarioIn):
+        try:
+            return app.state.users.create(**datos.model_dump())
+        except UsernameTaken:
+            raise HTTPException(409, f"Ya existe un usuario '{datos.username}'.")
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
+
+    @usuarios.put("/{user_id}")
+    def editar(user_id: str, datos: _UsuarioUpdate):
+        try:
+            return app.state.users.update(user_id, **datos.model_dump())
+        except KeyError:
+            raise HTTPException(404, "Usuario no encontrado.")
+
+    app.include_router(usuarios)
+    return app
+
+
+class InventarioFalso:
+    """Dos instancias, y una tercera que existe en el inventario pero no
+    responde — el caso que hay que poder mirar sin que se caiga la pantalla."""
+
+    soporta_ciclo_de_vida = True
+    soporta_planes = True
+
+    def __init__(self):
+        self._instancias = {
+            "acme": Instancia(slug="acme", nombre="ACME SA", container="producto-acme",
+                              domain="acme.test", port=8081, plan="pro", estado="running"),
+            "beta": Instancia(slug="beta", nombre="Beta SRL", container="producto-beta",
+                              domain="beta.test", port=8082, plan="basico", estado="running"),
+            "caida": Instancia(slug="caida", nombre="Caída SA", container="producto-caida",
+                               estado="exited"),
+        }
+
+    def listar(self):
+        return list(self._instancias.values())
+
+    def obtener(self, slug):
+        if slug not in self._instancias:
+            raise InstanciaDesconocida(slug)
+        return self._instancias[slug]
+
+
+class _TransporteDeInstancias(httpx.AsyncBaseTransport):
+    """Rutea por nombre de contenedor a la app de esa instancia.
+
+    Es lo que hace Docker en producción: `http://producto-acme:8000` resuelve
+    por DNS interno de la red compartida. Un contenedor sin app registrada
+    levanta `ConnectError`, igual que una instancia apagada.
     """
-    app = create_app(construir_settings(db_instancia, {"smtp", "usuarios", "salud"}))
+
+    def __init__(self, apps: dict):
+        self._transportes = {
+            host: httpx.ASGITransport(app=app) for host, app in apps.items()
+        }
+
+    async def handle_async_request(self, request):
+        transporte = self._transportes.get(request.url.host)
+        if transporte is None:
+            raise httpx.ConnectError(f"Name or service not known: {request.url.host}")
+        return await transporte.handle_async_request(request)
+
+
+# ── El backoffice ───────────────────────────────────────────────────────────
+
+def construir_settings(tmp_path, features=("instancias", "smtp", "usuarios", "salud"), **extra):
+    base = dict(
+        product_slug="gestiolibra", product_name="Gestiolibra",
+        features=frozenset(features), repo_root=tmp_path,
+        db_filename="gestiolibra.db", service_token=TOKEN,
+    )
+    return Settings(**{**base, **extra})
+
+
+@pytest.fixture
+def instancias_falsas(tmp_path):
+    """Las dos instancias que sí responden. `caida` queda sin app a propósito."""
+    return {
+        "producto-acme": construir_instancia_falsa(tmp_path / "acme.db"),
+        "producto-beta": construir_instancia_falsa(tmp_path / "beta.db"),
+    }
+
+
+@pytest.fixture
+def inventario():
+    return InventarioFalso()
+
+
+@pytest.fixture
+def cliente(tmp_path, instancias_falsas, inventario):
+    """Backoffice sin loguear.
+
+    `base_url` en **https**: `AdminAuth` marca la cookie como `secure` y el
+    cookie jar de httpx —correctamente— no la manda por una conexión insegura.
+    Con `http://testserver` el login daría 200 y todo lo demás 401, que parece
+    un bug de auth y es el navegador haciendo lo suyo. En producción NPM
+    termina el TLS, así que no aparece.
+    """
+    app = create_app(construir_settings(tmp_path), inventario=inventario)
+    app.state.cliente_instancia = ClienteInstancia(
+        token=TOKEN, transport=_TransporteDeInstancias(instancias_falsas)
+    )
     with TestClient(app, base_url="https://testserver") as c:
         yield c
 

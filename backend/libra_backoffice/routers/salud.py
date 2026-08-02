@@ -1,20 +1,24 @@
 """
-Salud del despliegue: qué versión está corriendo el backoffice y si la
-instancia del producto contesta.
+Salud del despliegue: qué está corriendo el backoffice y cuáles de sus
+instancias contestan.
 
-Chico a propósito. La pregunta que resuelve es la que se hace un humano
-después de un deploy —"¿esto que estoy mirando es el código nuevo, y el
-producto está vivo?"— y esa pregunta ya se contestó mal varias veces en esta
-familia mirando un `curl` que devolvía 200 contra un proceso que no se había
-reiniciado.
+La pregunta que resuelve es la que se hace un humano después de un deploy —"¿lo
+que estoy mirando es el código nuevo, y las instancias están vivas?"— y en esta
+familia ya se contestó mal varias veces mirando un `curl` que devolvía 200
+contra un proceso que nunca se había reiniciado.
+
+Consulta las instancias **en paralelo y con timeout**: con una docena de
+clientes, hacerlo en serie convertiría una instancia caída en una pantalla que
+tarda un minuto en cargar.
 """
+import asyncio
 import os
 import time
 from datetime import datetime, timezone
 
-import httpx
 from fastapi import APIRouter, Depends, Request
 
+from ..cliente_instancia import InstanciaInalcanzable, RespuestaDeInstancia
 from ..deps import admin_actual, requiere_feature
 
 router = APIRouter(
@@ -28,20 +32,26 @@ router = APIRouter(
 _ARRANQUE = time.time()
 
 
+async def _estado_de(cliente, instancia) -> dict:
+    base = {"slug": instancia.slug, "nombre": instancia.nombre, "container": instancia.container}
+    if not instancia.container:
+        return {**base, "estado": "sin contenedor", "detalle": "El compose no declara container_name."}
+    try:
+        await cliente.pedir("GET", instancia, "/health")
+    except InstanciaInalcanzable as exc:
+        return {**base, "estado": "inalcanzable", "detalle": exc.detalle}
+    except RespuestaDeInstancia as exc:
+        return {**base, "estado": "error", "detalle": f"HTTP {exc.status_code}"}
+    return {**base, "estado": "ok", "detalle": ""}
+
+
 @router.get("")
 async def salud(request: Request):
     settings = request.app.state.settings
-    producto = {"url": settings.product_health_url, "estado": "no configurado", "detalle": ""}
+    cliente = request.app.state.cliente_instancia
 
-    if settings.product_health_url:
-        try:
-            async with httpx.AsyncClient(timeout=5) as cliente:
-                resp = await cliente.get(settings.product_health_url)
-            producto["estado"] = "ok" if resp.status_code == 200 else "error"
-            producto["detalle"] = f"HTTP {resp.status_code}"
-        except Exception as exc:
-            producto["estado"] = "inalcanzable"
-            producto["detalle"] = f"{type(exc).__name__}: {exc}"
+    instancias = request.app.state.inventario.listar()
+    estados = await asyncio.gather(*(_estado_de(cliente, i) for i in instancias))
 
     return {
         "producto": {"slug": settings.product_slug, "nombre": settings.product_name},
@@ -52,5 +62,5 @@ async def salud(request: Request):
             "arrancado": datetime.fromtimestamp(_ARRANQUE, timezone.utc).isoformat(),
             "uptime_segundos": int(time.time() - _ARRANQUE),
         },
-        "instancia": producto,
+        "instancias": list(estados),
     }
