@@ -1,0 +1,73 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "libra-backoffice"
+version = "0.1.0"
+description = "Backoffice de superadmin compartido por los 6 productos de la familia Libra."
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+dependencies = [
+    # `AdminAuth` (sesion del superadmin), `SmtpSettingsRepository` (config SMTP
+    # cifrada) y `UserRepository` (ABM de usuarios de la instancia).
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.6.2",
+    # `admin.services` (gestion de instancias de cliente, feature `clientes`) y
+    # `security_headers`.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.2.0",
+    "fastapi>=0.111,<1",
+    "uvicorn[standard]>=0.30,<1",
+    "sqlalchemy>=2,<3",
+    "httpx>=0.27,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=6",
+    "ruff>=0.13",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["libra_backoffice"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+# Mismo ruleset curado que los otros 12 repos de la familia (fijado 2026-07-31):
+# da cero hallazgos hoy, asi que cualquier rojo futuro es una regresion real y
+# no deuda vieja. F401 queda afuera a proposito -- los re-exports de `__init__.py`
+# son API publica, no imports muertos.
+[tool.ruff]
+line-length = 120
+extend-exclude = ["frontend", "node_modules"]
+
+[tool.ruff.lint]
+select = [
+    "E9",
+    "F63",
+    "F7",
+    "F811",
+    "F822",
+    "F823",
+    "F841",
+    "F541",
+    "F502", "F506", "F522", "F524",
+    "F601", "F602",
+]
+
+[tool.coverage.run]
+source = ["libra_backoffice"]
+branch = true
+omit = ["*/tests/*", "*/.venv/*"]
+
+[tool.coverage.report]
+show_missing = true
+# Trinquete, no meta: fijado 3 puntos por debajo del 96% que medía el repo al
+# crearse, asi que hoy pasa holgado y lo unico que puede ponerlo en rojo es una
+# regresion. Cuando la cobertura suba de verdad, subir tambien este numero --
+# nunca bajarlo para que pase un cambio.
+fail_under = 93

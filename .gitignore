@@ -1,0 +1,24 @@
+# Entornos y build
+.venv/
+__pycache__/
+*.py[cod]
+node_modules/
+dist/
+.coverage
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+
+# Config local de herramientas: puede contener secretos.
+# Ver el incidente del 2026-07-15 (token de GitHub y password de cPanel en
+# claro dentro de un settings.local.json de Claude Code).
+.claude/
+.obsidian/
+.idea/
+.vscode/
+
+# Nunca: los .env llevan ADMIN_PANEL_PASSWORD, SECRET_KEY y la clave de cifrado
+# de la instancia. El ejemplo versionado es `docker-compose.example.yml`.
+.env
+*.env
+!*.example.env
