@@ -6,7 +6,8 @@
 // todo lo único que no puede probar libra-ui: que el `basePath` que se le pasa
 // lleve el slug correcto. Es la diferencia entre configurarle el correo al
 // cliente correcto y al equivocado.
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -38,18 +39,38 @@ const SMTP = {
   password_definida: false, password_indescifrable: false, configurado: false,
 }
 
+/** Lo que devuelve el alta. `admin_password` es lo que la hace distinta de una
+ *  `Instancia`: el motor la generó y esta respuesta es la única vez que sale. */
+const CREADA = {
+  slug: 'nueva', nombre: 'Nueva SA', domain: '', port: 8090,
+  container: 'producto-nueva', admin_user: 'admin',
+  admin_password: 'la-generada-por-el-motor', plan: 'basico', proxy_ok: null,
+}
+
 /** Sin sesión: `/api/me` responde 401, como con la cookie vencida. */
 function sinSesion() {
   fetchMock.mockImplementation(() => Promise.resolve(json({ detail: 'No autenticado' }, 401)))
 }
 
-function conSesion() {
-  fetchMock.mockImplementation((url: string) => {
+type Init = { method?: string } | undefined
+
+/** Respuestas por defecto, con `rutas` para pisar las que interesen al test. */
+function conSesion(rutas: Record<string, (init: Init) => Promise<Response>> = {}) {
+  fetchMock.mockImplementation((url: string, init: Init) => {
     const u = String(url)
+    const metodo = init?.method ?? 'GET'
+    const propia = rutas[`${metodo} ${u}`] ?? rutas[u]
+    if (propia) return propia(init)
+
     if (u.includes('/api/me')) return Promise.resolve(json({ username: 'superadmin' }))
-    if (u.endsWith('/api/instancias')) return Promise.resolve(json({ instancias: [INSTANCIA] }))
+    if (u.endsWith('/api/instancias')) {
+      // La misma URL es el inventario en GET y el alta en POST.
+      if (metodo === 'POST') return Promise.resolve(json(CREADA, 201))
+      return Promise.resolve(json({ instancias: [INSTANCIA] }))
+    }
     if (u.includes('/smtp')) return Promise.resolve(json(SMTP))
     if (u.includes('/usuarios')) return Promise.resolve(json([]))
+    if (u.endsWith('/baja')) return Promise.resolve(json({ slug: 'acme', backup: null, npm: null }))
     if (u.includes('/api/instancias/')) return Promise.resolve(json(INSTANCIA))
     if (u.includes('/api/planes')) return Promise.resolve(json([]))
     if (u.includes('/api/salud')) {
@@ -62,6 +83,14 @@ function conSesion() {
     }
     return Promise.resolve(json([]))
   })
+}
+
+/** Un click que no se pelea con el `pointer-events: none` que Radix le pone al
+ *  body mientras hay un diálogo modal abierto. */
+const usuario = () => userEvent.setup({ pointerEventsCheck: 0 })
+
+function cuerpoDe(llamada: unknown[]): Record<string, unknown> {
+  return JSON.parse(String((llamada[1] as { body?: string }).body))
 }
 
 function montar(ruta: string) {
@@ -132,5 +161,173 @@ describe('salud', () => {
     montar('/salud')
     expect(await screen.findByText('DemoLibra')).toBeInTheDocument()
     expect(await screen.findByText('ok')).toBeInTheDocument()
+  })
+})
+
+// ── Alta ────────────────────────────────────────────────────────────────────
+//
+// Estas tres pantallas existían en el backoffice Jinja2 y no se habían portado:
+// el backend las tenía, el SPA no las llamaba. Lo que se prueba acá es
+// justamente eso, que el botón termine en la request.
+
+async function abrirAlta() {
+  const u = usuario()
+  montar('/instancias')
+  await u.click(await screen.findByRole('button', { name: /nueva instancia/i }))
+  return u
+}
+
+describe('alta de una instancia', () => {
+  it('manda el alta con lo poco que se completó, sin inventar el resto', async () => {
+    conSesion()
+    const u = await abrirAlta()
+
+    await u.type(screen.getByLabelText(/nombre del cliente/i), 'Nueva SA')
+    await u.click(screen.getByRole('button', { name: /crear instancia/i }))
+
+    await waitFor(() => {
+      const alta = fetchMock.mock.calls.find(
+        (c) => String(c[0]).endsWith('/api/instancias') && (c[1] as Init)?.method === 'POST',
+      )
+      expect(alta).toBeDefined()
+      const cuerpo = cuerpoDe(alta!)
+      expect(cuerpo.nombre).toBe('Nueva SA')
+      // Vacíos NO se mandan: el motor deriva el slug del nombre y toma el
+      // próximo puerto libre. Mandar "" o 0 le pisaría esos defaults.
+      expect(cuerpo).not.toHaveProperty('slug')
+      expect(cuerpo).not.toHaveProperty('port')
+      expect(cuerpo).not.toHaveProperty('admin_password')
+    })
+  })
+
+  it('muestra la contraseña generada, que no vuelve por ningún otro lado', async () => {
+    conSesion()
+    const u = await abrirAlta()
+
+    await u.type(screen.getByLabelText(/nombre del cliente/i), 'Nueva SA')
+    await u.click(screen.getByRole('button', { name: /crear instancia/i }))
+
+    expect(await screen.findByText('la-generada-por-el-motor')).toBeInTheDocument()
+  })
+
+  it('avisa que no se reintente si la instancia apareció pese al error', async () => {
+    // El caso real: `docker compose up` + la espera de la base + el certificado
+    // pasan del minuto, el proxy corta la respuesta, y el alta termina igual.
+    // Reintentar a ciegas crearía un segundo cliente.
+    let altas = 0
+    conSesion({
+      'POST /api/instancias': () => {
+        altas += 1
+        return Promise.resolve(json({ detail: 'Gateway Timeout' }, 504))
+      },
+      'GET /api/instancias': () =>
+        Promise.resolve(json({
+          instancias: altas ? [INSTANCIA, { ...INSTANCIA, slug: 'nueva' }] : [INSTANCIA],
+        })),
+    })
+    const u = await abrirAlta()
+
+    await u.type(screen.getByLabelText(/nombre del cliente/i), 'Nueva SA')
+    await u.click(screen.getByRole('button', { name: /crear instancia/i }))
+
+    expect(await screen.findByText(/no reintentes todavía/i)).toBeInTheDocument()
+  })
+
+  it('un 422 es un rechazo del motor: no se sale a buscar instancias huérfanas', async () => {
+    conSesion({
+      'POST /api/instancias': () =>
+        Promise.resolve(json({ detail: 'Ya existe un cliente con slug «acme».' }, 422)),
+    })
+    const u = await abrirAlta()
+
+    await u.type(screen.getByLabelText(/nombre del cliente/i), 'ACME')
+    await u.click(screen.getByRole('button', { name: /crear instancia/i }))
+
+    expect(await screen.findByText(/ya existe un cliente/i)).toBeInTheDocument()
+    expect(screen.queryByText(/no reintentes todavía/i)).not.toBeInTheDocument()
+  })
+})
+
+// ── Editar y baja ───────────────────────────────────────────────────────────
+
+describe('editar una instancia', () => {
+  it('guarda nombre y dominio con un PUT', async () => {
+    conSesion()
+    const u = usuario()
+    montar('/instancias/acme')
+
+    await u.click(await screen.findByRole('button', { name: /^editar$/i }))
+    const nombre = screen.getByLabelText(/^nombre$/i)
+    await u.clear(nombre)
+    await u.type(nombre, 'ACME SRL')
+    await u.click(screen.getByRole('button', { name: /guardar/i }))
+
+    await waitFor(() => {
+      const put = fetchMock.mock.calls.find((c) => (c[1] as Init)?.method === 'PUT')
+      expect(put).toBeDefined()
+      expect(String(put![0])).toBe('/api/instancias/acme')
+      expect(cuerpoDe(put!)).toEqual({ nombre: 'ACME SRL', domain: 'acme.test' })
+    })
+  })
+})
+
+describe('baja de una instancia', () => {
+  it('no deja confirmar hasta que el slug escrito coincide', async () => {
+    conSesion()
+    const u = usuario()
+    montar('/instancias/acme')
+
+    await u.click(await screen.findByRole('button', { name: /dar de baja/i }))
+    const dialogo = screen.getByRole('dialog')
+    const confirmar = within(dialogo).getByRole('button', { name: /dar de baja/i })
+    expect(confirmar).toBeDisabled()
+
+    await u.type(within(dialogo).getByLabelText(/para confirmar/i), 'acmee')
+    expect(confirmar).toBeDisabled()
+
+    await u.clear(within(dialogo).getByLabelText(/para confirmar/i))
+    await u.type(within(dialogo).getByLabelText(/para confirmar/i), 'acme')
+    expect(confirmar).toBeEnabled()
+  })
+
+  it('pega en /baja con el slug repetido y el backup pedido', async () => {
+    conSesion()
+    const u = usuario()
+    montar('/instancias/acme')
+
+    await u.click(await screen.findByRole('button', { name: /dar de baja/i }))
+    const dialogo = screen.getByRole('dialog')
+    await u.type(within(dialogo).getByLabelText(/para confirmar/i), 'acme')
+    await u.click(within(dialogo).getByRole('button', { name: /dar de baja/i }))
+
+    await waitFor(() => {
+      const baja = fetchMock.mock.calls.find((c) => String(c[0]).endsWith('/baja'))
+      expect(baja).toBeDefined()
+      // POST, no DELETE: el api-client compartido manda DELETE sin cuerpo y la
+      // confirmación viaja en el cuerpo.
+      expect((baja![1] as Init)?.method).toBe('POST')
+      expect(String(baja![0])).toBe('/api/instancias/acme/baja')
+      expect(cuerpoDe(baja!)).toEqual({ confirmar_slug: 'acme', hacer_backup: true })
+    })
+  })
+
+  it('vuelve al inventario mostrando dónde quedó el backup', async () => {
+    conSesion({
+      'POST /api/instancias/acme/baja': () =>
+        Promise.resolve(json({
+          slug: 'acme', backup: '/root/producto/clientes/acme_backup_20260802.tar.gz', npm: true,
+        })),
+    })
+    const u = usuario()
+    montar('/instancias/acme')
+
+    await u.click(await screen.findByRole('button', { name: /dar de baja/i }))
+    const dialogo = screen.getByRole('dialog')
+    await u.type(within(dialogo).getByLabelText(/para confirmar/i), 'acme')
+    await u.click(within(dialogo).getByRole('button', { name: /dar de baja/i }))
+
+    expect(
+      await screen.findByText(/acme_backup_20260802\.tar\.gz/),
+    ).toBeInTheDocument()
   })
 })

@@ -27,6 +27,44 @@ export type Instancia = {
   modulos_activos: number | null
 }
 
+// Lo que el alta acepta. Casi todo es opcional porque el motor tiene un default
+// mejor que cualquiera que pueda inventar la UI: el slug sale del nombre, el
+// puerto es el próximo libre y la contraseña se genera.
+export type AltaIn = {
+  nombre: string
+  slug?: string
+  domain?: string
+  port?: number
+  admin_user?: string
+  admin_password?: string
+  plan?: string
+  setup_npm?: boolean
+}
+
+// Lo que devuelve el alta, que **no** es una `Instancia`: trae `admin_user` y
+// `admin_password`. Si el alta se pidió sin contraseña, el motor genera una y
+// esta respuesta es la única vez que sale del host — de ahí que la pantalla la
+// muestre en vez de refrescar el listado y seguir.
+export type InstanciaCreada = {
+  slug: string
+  nombre: string
+  domain: string
+  port: number | string
+  container: string
+  admin_user: string
+  admin_password: string
+  plan: string
+  // `null` = no se intentó (sin dominio, o NPM sin configurar). `false` = se
+  // intentó y falló: la instancia existe pero su dominio todavía no resuelve.
+  proxy_ok: boolean | null
+}
+
+export type Baja = {
+  slug: string
+  backup: string | null
+  npm: boolean | null
+}
+
 export type Plan = {
   key: string
   label: string
@@ -60,7 +98,7 @@ export const backoffice = {
   planes: () => api.get<Plan[]>('/api/planes'),
   salud: () => api.get<Salud>('/api/salud'),
 
-  crear: (datos: Record<string, unknown>) => api.post<Instancia>('/api/instancias', datos),
+  crear: (datos: AltaIn) => api.post<InstanciaCreada>('/api/instancias', datos),
   editar: (slug: string, datos: { nombre: string; domain: string }) =>
     api.put<Instancia>(`/api/instancias/${slug}`, datos),
   cambiarPlan: (slug: string, plan: string) =>
@@ -68,6 +106,11 @@ export const backoffice = {
   accion: (slug: string, accion: string) =>
     api.post<Instancia>(`/api/instancias/${slug}/estado`, { accion }),
   backup: (slug: string) => api.post<{ archivo: string }>(`/api/instancias/${slug}/backup`),
+  // POST y no DELETE: la baja lleva un cuerpo obligatorio —la confirmación del
+  // slug— y el `api-client` compartido manda DELETE sin cuerpo. Ver el
+  // comentario del router.
+  baja: (slug: string, datos: { confirmar_slug: string; hacer_backup: boolean }) =>
+    api.post<Baja>(`/api/instancias/${slug}/baja`, datos),
 }
 
 // Rutas que consumen los componentes de libra-ui vía su prop `basePath`.

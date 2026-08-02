@@ -69,6 +69,28 @@ class BajaIn(BaseModel):
     hacer_backup: bool = True
 
 
+class InstanciaCreada(BaseModel):
+    """Lo que devuelve el alta.
+
+    `admin_password` importa: si el alta se pidió sin contraseña, el motor
+    **genera una** y esta respuesta es la única vez que la UI la ve. Queda
+    también en `clientes/<slug>/cliente.json` del host, que es el único lugar
+    donde recuperarla si el navegador nunca llegó a ver esta respuesta.
+    """
+
+    slug: str
+    nombre: str = ""
+    domain: str = ""
+    port: int | str = ""
+    container: str = ""
+    admin_user: str = ""
+    admin_password: str = ""
+    plan: str = ""
+    # `None` = no se intentó (sin dominio, o NPM no configurado). `False` = se
+    # intentó y falló: el cliente existe pero su dominio no resuelve todavía.
+    proxy_ok: bool | None = None
+
+
 @router.get("/instancias")
 def listar(request: Request):
     return {"instancias": [i.dict() for i in _inventario(request).listar()]}
@@ -79,7 +101,7 @@ def detalle(slug: str, request: Request):
     return _obtener(request, slug).dict()
 
 
-@router.post("/instancias", status_code=201)
+@router.post("/instancias", status_code=201, response_model=InstanciaCreada)
 def crear(datos: InstanciaIn, request: Request):
     servicios = _servicios(request)
     try:
@@ -126,7 +148,14 @@ def backup(slug: str, request: Request):
         raise HTTPException(422, str(exc))
 
 
-@router.delete("/instancias/{slug}")
+# POST y no DELETE, por dos razones que apuntan al mismo lado. La baja lleva un
+# cuerpo obligatorio (la confirmación del slug) y el `api-client` de libra-ui
+# —compartido por los seis productos— manda `DELETE` sin cuerpo; hacerlo con
+# DELETE obligaría a versionar ese paquete para esta sola ruta. Y las otras dos
+# acciones destructivas de este router ya son POST sobre un sub-recurso
+# (`/estado`, `/backup`), igual que el `POST /clientes/<slug>/eliminar` del
+# backoffice Jinja2 que este reemplaza.
+@router.post("/instancias/{slug}/baja")
 def baja(slug: str, datos: BajaIn, request: Request):
     servicios = _servicios(request)
     if datos.confirmar_slug != slug:
