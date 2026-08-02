@@ -1,15 +1,14 @@
 """
 Inventario y ciclo de vida de las instancias del producto.
 
-**No reimplementa nada.** Para los cinco productos con `libracore.provisioning`,
-toda la lógica real (Docker, NPM, planes, backup, baja) vive en
-`libracore.admin.services`, que envuelve los scripts `panel_admin.py` /
-`nuevo_cliente.py` / `plans.py` del repo de cada uno. Acá se traduce a JSON: la
-versión Jinja2 de este mismo router devolvía plantillas.
+**No reimplementa nada.** Toda la lógica real (Docker, NPM, planes, backup,
+baja) vive en `libracore.admin.services`, que envuelve los scripts
+`panel_admin.py` / `nuevo_cliente.py` / `plans.py` del repo de cada producto.
+Acá se traduce a JSON: la versión Jinja2 de este mismo router devolvía
+plantillas.
 
-LibraDesk usa el backend `compose`, que sabe enumerar pero no operar — sus
-instancias se despliegan con `deploy_cliente.sh`. Las rutas de ciclo de vida
-contestan `501` ahí, con el motivo.
+Los seis productos tienen esos scripts y se administran igual, así que este
+router no tiene ninguna rama por producto.
 """
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -29,16 +28,7 @@ def _inventario(request: Request):
 
 
 def _servicios(request: Request):
-    """`libracore.admin.services`, sólo donde el backend lo soporta."""
-    inventario = _inventario(request)
-    if not inventario.soporta_ciclo_de_vida:
-        raise HTTPException(
-            501,
-            "Este producto despliega sus instancias con su propio script "
-            "(`deploy_cliente.sh`) y no tiene `libracore.provisioning`: desde el "
-            "backoffice se pueden listar, no operar.",
-        )
-    return inventario.servicios
+    return _inventario(request).servicios
 
 
 def _obtener(request: Request, slug: str):
@@ -81,12 +71,7 @@ class BajaIn(BaseModel):
 
 @router.get("/instancias")
 def listar(request: Request):
-    inventario = _inventario(request)
-    return {
-        "instancias": [i.dict() for i in inventario.listar()],
-        "soporta_ciclo_de_vida": inventario.soporta_ciclo_de_vida,
-        "soporta_planes": inventario.soporta_planes,
-    }
+    return {"instancias": [i.dict() for i in _inventario(request).listar()]}
 
 
 @router.get("/instancias/{slug}")

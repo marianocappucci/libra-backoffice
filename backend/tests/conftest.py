@@ -113,9 +113,6 @@ class InventarioFalso:
     """Dos instancias, y una tercera que existe en el inventario pero no
     responde — el caso que hay que poder mirar sin que se caiga la pantalla."""
 
-    soporta_ciclo_de_vida = True
-    soporta_planes = True
-
     def __init__(self):
         self._instancias = {
             "acme": Instancia(slug="acme", nombre="ACME SA", container="producto-acme",

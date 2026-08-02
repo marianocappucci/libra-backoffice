@@ -20,14 +20,6 @@ from pathlib import Path
 
 FEATURES_VALIDAS = frozenset({"instancias", "smtp", "usuarios", "salud"})
 
-# Cómo se enumeran las instancias de este producto.
-#   libracore → `clientes/<slug>/cliente.json` + planes, vía
-#               `libracore.admin.services`. Lo usan cinco.
-#   compose   → sólo `clientes/<slug>/docker-compose.yml`. Lo usa LibraDesk,
-#               que despliega con `deploy_cliente.sh` y no tiene ni planes ni
-#               `libracore.provisioning`.
-BACKENDS_VALIDOS = frozenset({"libracore", "compose"})
-
 
 class ConfiguracionInvalida(RuntimeError):
     """El entorno no alcanza para levantar el backoffice."""
@@ -40,7 +32,6 @@ class Settings:
     features: frozenset[str]
 
     # Inventario de instancias.
-    instancias_backend: str = "libracore"
     repo_root: Path | None = None
     db_filename: str = ""
 
@@ -91,12 +82,6 @@ def cargar_settings(env: dict | None = None) -> Settings:
 
     features = _leer_features(env.get("FEATURES", ""))
 
-    backend = (env.get("INSTANCIAS_BACKEND") or "libracore").strip()
-    if backend not in BACKENDS_VALIDOS:
-        raise ConfiguracionInvalida(
-            f"INSTANCIAS_BACKEND inválido: {backend!r}. Válidos: {sorted(BACKENDS_VALIDOS)}."
-        )
-
     # El inventario hace falta aunque sólo esté `smtp`: sin lista de instancias
     # no hay a cuál configurarle el correo.
     repo_root_crudo = (env.get("REPO_ROOT") or "").strip()
@@ -106,10 +91,10 @@ def cargar_settings(env: dict | None = None) -> Settings:
         )
 
     db_filename = (env.get("DB_FILENAME") or "").strip()
-    if backend == "libracore" and not db_filename:
+    if not db_filename:
         raise ConfiguracionInvalida(
-            "El backend 'libracore' necesita DB_FILENAME (el nombre del archivo de "
-            "base de cada instancia, ej. `contalibra.db`)."
+            "Falta DB_FILENAME: el nombre del archivo de base de cada instancia "
+            "(ej. `contalibra.db`)."
         )
 
     token = (env.get("LIBRA_SERVICE_TOKEN") or "").strip()
@@ -124,7 +109,6 @@ def cargar_settings(env: dict | None = None) -> Settings:
         product_slug=slug,
         product_name=(env.get("PRODUCT_NAME") or slug.title()).strip(),
         features=features,
-        instancias_backend=backend,
         repo_root=Path(repo_root_crudo),
         db_filename=db_filename,
         instancia_puerto=int(env.get("INSTANCIA_PUERTO") or 8000),

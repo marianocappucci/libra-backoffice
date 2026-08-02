@@ -109,24 +109,14 @@ def test_feature_mal_escrita_no_pasa_en_silencio():
         cargar_settings({**BASE, "FEATURES": "smpt,salud"})
 
 
-def test_backend_invalido():
-    with pytest.raises(ConfiguracionInvalida, match="INSTANCIAS_BACKEND"):
-        cargar_settings({**BASE, "INSTANCIAS_BACKEND": "kubernetes"})
-
-
 def test_falta_repo_root():
     with pytest.raises(ConfiguracionInvalida, match="REPO_ROOT"):
         cargar_settings({**BASE, "REPO_ROOT": ""})
 
 
-def test_backend_libracore_sin_db_filename():
+def test_falta_db_filename():
     with pytest.raises(ConfiguracionInvalida, match="DB_FILENAME"):
         cargar_settings({**BASE, "DB_FILENAME": ""})
-
-
-def test_backend_compose_no_necesita_db_filename():
-    s = cargar_settings({**BASE, "INSTANCIAS_BACKEND": "compose", "DB_FILENAME": ""})
-    assert s.instancias_backend == "compose"
 
 
 def test_smtp_sin_token_de_servicio():

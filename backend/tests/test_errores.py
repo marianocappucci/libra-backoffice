@@ -79,9 +79,8 @@ def anyio_backend():
 # ── Salud con instancias en mal estado ──────────────────────────────────────
 
 def test_salud_reporta_instancia_sin_container_name(logueado, inventario):
-    """El backend `compose` puede devolver una instancia cuyo compose no
-    declara `container_name`. No hay a quién preguntarle, y decirlo es mejor
-    que reportarla como caída."""
+    """Una instancia cuyo `cliente.json` quedó sin `container`. No hay a quién
+    preguntarle, y decirlo es mejor que reportarla como caída."""
     inventario._instancias["huerfana"] = Instancia(
         slug="huerfana", nombre="Sin contenedor", container=""
     )
