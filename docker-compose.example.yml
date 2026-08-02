@@ -1,0 +1,60 @@
+# Plantilla del compose del backoffice de UN producto.
+#
+# Copiar a `/root/<producto>/admin/docker-compose.yml` en el VPS y ajustar el
+# slug. Los secretos van en `/etc/<producto>-admin.env` (chmod 600, fuera del
+# repo), igual que los backoffices que ya existían.
+#
+# Tres cosas que no son obvias:
+#
+# 1. **No publica puertos al host.** El proxy de NPM llega por nombre de
+#    contenedor dentro de `stack_stack-net` (patrón 1 de
+#    wiki/concepts/nginx-proxy-manager.md), así que no hay que buscar un puerto
+#    libre — 8069-8088 ya están todos ocupados.
+# 2. **Monta el checkout del producto y el socket de Docker.** El backoffice
+#    administra instancias: `libracore.admin.services` envuelve los scripts del
+#    repo, que crean directorios en `clientes/` y hablan con Docker.
+# 3. `image:` con una versión concreta y sin `build:`. La instancia corre un
+#    artefacto fijo; nunca `:latest`, que se mueve solo.
+
+name: gestiolibra-admin
+
+services:
+  admin:
+    image: libra-backoffice:v2026.08.02-0000
+    container_name: gestiolibra-admin
+    restart: unless-stopped
+    mem_limit: 512m
+    mem_reservation: 128m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    env_file:
+      - /etc/gestiolibra-admin.env
+    environment:
+      - PRODUCT_SLUG=gestiolibra
+      - PRODUCT_NAME=Gestiolibra
+      - FEATURES=instancias,smtp,usuarios,salud
+      - REPO_ROOT=/producto
+      - DB_FILENAME=gestiolibra.db
+      # Los cuatro FastAPI montan el router de SMTP de libraauth en
+      # `/admin/smtp` y su router de usuarios en `/users`. Contalibra y
+      # Restolibra escriben los suyos: `/api/config/smtp` y `/api/usuarios`.
+      - SMTP_PATH=/admin/smtp
+      - USERS_PATH=/users
+    volumes:
+      # El checkout del producto en el host: de acá sale `clientes/` y de acá
+      # se importan `panel_admin.py` / `nuevo_cliente.py` / `plans.py`.
+      - /root/gestiolibra:/producto
+      # Sin esto el backoffice lista instancias pero no puede operarlas.
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - stack-net
+
+networks:
+  stack-net:
+    external: true
+    name: stack_stack-net
