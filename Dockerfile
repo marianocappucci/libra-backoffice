@@ -27,7 +27,23 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client curl ca-certificates gnupg && rm -rf /var/lib/apt/lists/*
+
+# CLIENTE de Docker + plugin de compose. **No es opcional**: el backoffice
+# administra instancias a través de `libracore.provisioning.panel_admin`, que no
+# usa una librería sino que ejecuta `docker inspect` y `docker compose` como
+# subprocesos. Montar `/var/run/docker.sock` da acceso al daemon del host, pero
+# sin el binario el contenedor levanta y recién falla al listar instancias con
+# un `FileNotFoundError: 'docker'` (pasó en el piloto de Gestiolibra).
+#
+# Sólo el cliente, no el daemon: el contenedor le habla al Docker del host.
+RUN install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
+    && rm -rf /var/lib/apt/lists/*
 
 # `pip install .` tiene que resolver libracore Y libraauth en un solo comando,
 # así que un `SSH_AUTH_SOCK` global no alcanza: esa variable apunta a un solo

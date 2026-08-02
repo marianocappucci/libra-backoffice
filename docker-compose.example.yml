@@ -10,9 +10,19 @@
 #    contenedor dentro de `stack_stack-net` (patrón 1 de
 #    wiki/concepts/nginx-proxy-manager.md), así que no hay que buscar un puerto
 #    libre — 8069-8088 ya están todos ocupados.
-# 2. **Monta el checkout del producto y el socket de Docker.** El backoffice
-#    administra instancias: `libracore.admin.services` envuelve los scripts del
-#    repo, que crean directorios en `clientes/` y hablan con Docker.
+# 2. **Monta el checkout del producto EN LA MISMA RUTA que en el host**, y el
+#    socket de Docker. Lo primero no es capricho: `panel_admin` ejecuta
+#    `docker compose -f <ruta>` como subproceso, y esa ruta la resuelve el
+#    daemon del HOST. Montando en `/producto` el compose de un cliente pediría
+#    un bind de `/producto/clientes/<slug>/data`, que en el host no existe, y
+#    Docker crearía un directorio vacío en su lugar: la instancia arrancaría
+#    sin sus datos. Con la ruta espejada, lo que ve el contenedor y lo que ve
+#    el daemon son lo mismo.
+#
+#    ⚠️ Montar el socket le da al contenedor control total del Docker del host,
+#    o sea root efectivo. Es inherente a lo que hace un backoffice que
+#    provisiona instancias — el servicio systemd anterior tenía el mismo poder,
+#    sólo que sin contenedor de por medio.
 # 3. `image:` con una versión concreta y sin `build:`. La instancia corre un
 #    artefacto fijo; nunca `:latest`, que se mueve solo.
 
@@ -38,7 +48,8 @@ services:
       - PRODUCT_SLUG=gestiolibra
       - PRODUCT_NAME=Gestiolibra
       - FEATURES=instancias,smtp,usuarios,salud
-      - REPO_ROOT=/producto
+      # La MISMA ruta que en el host, ver la nota 2 de arriba.
+      - REPO_ROOT=/root/gestiolibra
       - DB_FILENAME=gestiolibra.db
       # Los cuatro FastAPI montan el router de SMTP de libraauth en
       # `/admin/smtp` y su router de usuarios en `/users`. Contalibra y
@@ -46,9 +57,9 @@ services:
       - SMTP_PATH=/admin/smtp
       - USERS_PATH=/users
     volumes:
-      # El checkout del producto en el host: de acá sale `clientes/` y de acá
-      # se importan `panel_admin.py` / `nuevo_cliente.py` / `plans.py`.
-      - /root/gestiolibra:/producto
+      # El checkout del producto, espejado: de acá sale `clientes/` y de acá se
+      # importan `panel_admin.py` / `nuevo_cliente.py` / `plans.py`.
+      - /root/gestiolibra:/root/gestiolibra
       # Sin esto el backoffice lista instancias pero no puede operarlas.
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
