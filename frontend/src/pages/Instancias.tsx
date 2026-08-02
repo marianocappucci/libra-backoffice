@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { type ColumnDef } from '@tanstack/react-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
+import { AltaInstancia } from '../components/AltaInstancia'
 import { DataTable, sortableHeader } from '../components/data-table'
-import { ApiError, backoffice, type Instancia } from '../api'
+import { ApiError, backoffice, type Instancia, type Plan } from '../api'
 
 function describirError(err: unknown): string {
   if (err instanceof ApiError) return err.detail
@@ -19,17 +20,32 @@ function VarianteEstado({ estado }: { estado: string }) {
 }
 
 export function Instancias() {
+  // La baja redirige acá y trae su aviso en el estado de la navegación: incluye
+  // la ruta del backup, que es la única copia que queda de esos datos.
+  const { state } = useLocation()
+  const avisoDeBaja = (state as { aviso?: string } | null)?.aviso ?? null
+
   const [instancias, setInstancias] = useState<Instancia[]>([])
+  const [planes, setPlanes] = useState<Plan[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Devuelve los slugs porque el alta los necesita para distinguir un alta que
+  // falló de una que el navegador no llegó a ver terminar.
+  const recargar = useCallback(async () => {
+    const { instancias } = await backoffice.instancias()
+    setInstancias(instancias)
+    return instancias.map((i) => i.slug)
+  }, [])
+
   useEffect(() => {
-    backoffice
-      .instancias()
-      .then((r) => setInstancias(r.instancias))
+    // Los planes se piden acá y no dentro del diálogo para que el formulario de
+    // alta abra con el select ya poblado.
+    Promise.all([recargar(), backoffice.planes().catch(() => [])])
+      .then(([, p]) => setPlanes(p))
       .catch((err) => setError(describirError(err)))
       .finally(() => setCargando(false))
-  }, [])
+  }, [recargar])
 
   const columnas = useMemo<ColumnDef<Instancia>[]>(
     () => [
@@ -63,10 +79,18 @@ export function Instancias() {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
         <CardTitle>Instancias</CardTitle>
+        <AltaInstancia
+          planes={planes}
+          slugsPrevios={instancias.map((i) => i.slug)}
+          recargar={recargar}
+        />
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        {avisoDeBaja && (
+          <p className="rounded-md border p-3 text-sm font-medium break-all">{avisoDeBaja}</p>
+        )}
         {error && <p className="text-sm font-medium text-destructive">{error}</p>}
         {!error && instancias.length === 0 && (
           <p className="text-sm text-muted-foreground">

@@ -49,10 +49,32 @@ y nunca sale a internet.
 
 Se declaran por entorno: `FEATURES=instancias,smtp,usuarios,salud`.
 
-`INSTANCIAS_BACKEND` elige cómo se enumeran: `libracore` (cinco productos, con
-`cliente.json` y planes) o `compose` (LibraDesk, que despliega con
-`deploy_cliente.sh` y sólo tiene `docker-compose.yml` por instancia — ahí el
-backoffice lista pero no opera, y las rutas de ciclo de vida contestan `501`).
+## Ciclo de vida de una instancia
+
+`instancias` cubre el onboarding completo, sin salir del navegador:
+
+| Pantalla | Qué hace del otro lado |
+|---|---|
+| **Alta** (`POST /api/instancias`) | Directorio del cliente, `docker compose up`, plan inicial y —con dominio— proxy con SSL |
+| **Editar** (`PUT /api/instancias/{slug}`) | Nombre y dominio en `cliente.json`; con dominio nuevo, proxy nuevo |
+| **Plan / estado / backup** | `set_plan`, `start`/`stop`/`restart`, tar.gz de `data/` |
+| **Baja** (`POST /api/instancias/{slug}/baja`) | Backup, borra el proxy, `docker compose down -v` y `rmtree` del directorio |
+
+Dos detalles que la UI no puede tratar como cualquier formulario:
+
+- **La contraseña del admin vuelve una sola vez.** Si el alta no la trae, el
+  motor la genera y la devuelve en esa única respuesta. Por eso el alta termina
+  en un panel de credenciales y no redirigiendo al listado. Si el navegador
+  nunca llega a verla, queda en `clientes/<slug>/cliente.json` del host.
+- **El alta puede pasar del minuto** —levantar el contenedor, esperar a que
+  inicialice su base y emitir el certificado— y un proxy con `proxy_read_timeout`
+  corto puede cortar la respuesta con el alta ya en curso. La pantalla no
+  reintenta: relee el inventario y, si apareció una instancia nueva, avisa que
+  no se reintente.
+
+La baja es `POST .../baja` y no `DELETE` porque lleva un cuerpo obligatorio (la
+confirmación del slug) y el `api-client` de `libra-ui` —compartido por los seis
+productos— manda `DELETE` sin cuerpo.
 
 ## Qué reusa
 
@@ -95,8 +117,7 @@ cd frontend && npm install && npm run build
 | `ADMIN_PANEL_USER` / `ADMIN_PANEL_PASSWORD` | sí | Credenciales del superadmin. Sin password, se rechaza todo login. |
 | `SECRET_KEY` | sí | Firma la cookie de sesión **de este backoffice**. |
 | `REPO_ROOT` | sí | Checkout del producto en el host, donde vive `clientes/`. |
-| `INSTANCIAS_BACKEND` | no | `libracore` (default) o `compose`. |
-| `DB_FILENAME` | con `libracore` | Nombre del archivo de base de cada instancia (`contalibra.db`). |
+| `DB_FILENAME` | sí | Nombre del archivo de base de cada instancia (`contalibra.db`). |
 | `LIBRA_SERVICE_TOKEN` | con `smtp`/`usuarios` | El mismo valor que tienen seteado las instancias de este producto. |
 | `SMTP_PATH` | no | Default `/admin/smtp`. Contalibra y Restolibra usan `/api/config/smtp`. |
 | `USERS_PATH` | no | Default `/users`. LibraDesk usa `/api/usuarios`. |

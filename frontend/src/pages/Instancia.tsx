@@ -5,8 +5,8 @@
 // es deliberado: en un producto multi-cliente una pantalla de "correo
 // saliente" sin instancia a la vista es ambigua, y esa ambigüedad se paga
 // configurándole el servidor de correo al cliente equivocado.
-import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ConfiguracionSmtp } from 'libra-ui/ConfiguracionSmtp'
 import { Usuarios } from 'libra-ui/Usuarios'
 import { Badge } from '@/components/ui/badge'
@@ -16,6 +16,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 
+import { BajaInstancia } from '../components/BajaInstancia'
+import { EditarInstancia } from '../components/EditarInstancia'
 import {
   ApiError, backoffice, rutaSmtp, rutaUsuarios, type Instancia as TInstancia, type Plan,
 } from '../api'
@@ -33,12 +35,17 @@ const ACCIONES = [
 
 export function Instancia() {
   const { slug = '' } = useParams()
+  const navegar = useNavigate()
   const [instancia, setInstancia] = useState<TInstancia | null>(null)
   const [planes, setPlanes] = useState<Plan[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
   const [ocupado, setOcupado] = useState(false)
+
+  const releer = useCallback(async () => {
+    setInstancia(await backoffice.instancia(slug))
+  }, [slug])
 
   useEffect(() => {
     setCargando(true)
@@ -126,6 +133,30 @@ export function Instancia() {
             <Button variant="outline" size="sm" disabled={ocupado} onClick={hacerBackup}>
               Backup
             </Button>
+            <EditarInstancia
+              instancia={instancia}
+              onEditada={async () => {
+                await releer()
+                setAviso('Datos actualizados.')
+              }}
+            />
+            <BajaInstancia
+              instancia={instancia}
+              onDadaDeBaja={(backup) =>
+                // La pantalla de una instancia que ya no existe no tiene qué
+                // mostrar, así que se sale de acá. El aviso viaja en el estado
+                // de la navegación porque la ruta del backup es la única copia
+                // que queda de los datos del cliente.
+                navegar('/instancias', {
+                  replace: true,
+                  state: {
+                    aviso: backup
+                      ? `Instancia «${instancia.slug}» dada de baja. Backup en ${backup}`
+                      : `Instancia «${instancia.slug}» dada de baja, sin backup.`,
+                  },
+                })
+              }
+            />
           </div>
 
           {planes.length > 0 && (
