@@ -37,7 +37,17 @@ services:
     mem_reservation: 128m
     cpus: 0.5
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      # Mira el CUERPO y no el codigo HTTP: este backend sirve la SPA del panel
+      # con un catch-all, asi que cualquier ruta devuelve 200 y un `urlopen()`
+      # a secas no puede fallar. Medido el 2026-08-12 en los 21 contenedores
+      # del VPS: los 21 daban exit 0 tambien contra una ruta inventada.
+      # `json.load` sobre el index.html revienta, que es lo que se busca.
+      #
+      # Y el caso que lo vuelve concreto: ese mismo dia los seis backoffices
+      # devolvian 500 en `/api/salud` por un pin viejo de libracore, y los seis
+      # figuraban `healthy`. Este chequeo no lo habria agarrado tampoco —mide
+      # `/health`, no el panel—, pero deja de mentir sobre lo que si mide.
+      test: ["CMD", "python3", "-c", "import json,urllib.request; assert isinstance(json.load(urllib.request.urlopen('http://localhost:8000/health', timeout=3)), dict)"]
       interval: 30s
       timeout: 5s
       retries: 3
