@@ -17,7 +17,27 @@ dependencies = [
     # `security_headers`. v1.3.0: el alta ya no elige un puerto que otro
     # producto del host tiene bindeado, y hace rollback del directorio si el
     # `docker compose up` falla.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.3.0",
+    #
+    # 🔴 v1.34.0 NO es un bump de rutina: el pin quedo clavado en v1.3.0 desde
+    # el 2026-08-02 mientras los productos avanzaban 31 versiones, y este
+    # paquete **importa el `scripts/panel_admin.py` del producto montado desde
+    # el host** (`libracore.admin.services._pa()`). O sea que el argumento que
+    # ese script le pasa a `configure()` lo tiene que entender la libracore que
+    # vive ACA ADENTRO, no la del producto.
+    #
+    # Roto de verdad el 2026-08-12: Contalibra y Restolibra empezaron a pasar
+    # `configure(backup_zip=True)` (commit `acb41be`, la pantalla de Backup
+    # saliendo del motor) y los seis backoffices devolvieron **500 en
+    # `/api/salud`** con `TypeError: configure() got an unexpected keyword
+    # argument 'backup_zip'`. Los contenedores seguian `healthy`: su `/health`
+    # no toca ese camino.
+    #
+    # La leccion, para la proxima: **este pin no es independiente del de los
+    # productos**. Si un producto suma un argumento a `configure()`, este
+    # paquete se entera recien cuando alguien abre el panel. Y como el import
+    # queda cacheado en `sys.modules`, el proceso viejo lo tapa hasta el
+    # siguiente reinicio.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.34.0",
     "fastapi>=0.111,<1",
     "uvicorn[standard]>=0.30,<1",
     # El control plane le habla a cada instancia por HTTP.
