@@ -34,6 +34,16 @@ if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = vi.fn()
 }
 
+// La API de Pointer Capture tampoco existe en jsdom, y el Select de Radix la
+// llama al abrirse. Sin esto, ABRIR un select revienta con
+// `target.hasPointerCapture is not a function` — el select monta bien, asi que
+// una pantalla con uno pasa los tests mientras nadie lo despliegue.
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = () => false
+  Element.prototype.setPointerCapture = vi.fn()
+  Element.prototype.releasePointerCapture = vi.fn()
+}
+
 // jsdom NO tiene motor de layout: implementa `document.createRange()` pero
 // el Range que devuelve no trae `getBoundingClientRect`. El `data-table`
 // de libra-ui mide ahi el ancho de la columna de acciones y revienta con

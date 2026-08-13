@@ -9,6 +9,8 @@ y el contrato entre el backoffice y las instancias es justamente lo que este
 proyecto está estrenando. Así, si el guard de libraauth cambia, esta suite se
 entera.
 """
+from dataclasses import replace
+
 import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -117,8 +119,12 @@ class InventarioFalso:
         self._instancias = {
             "acme": Instancia(slug="acme", nombre="ACME SA", container="producto-acme",
                               domain="acme.test", port=8081, plan="pro", estado="running"),
+            # `beta` corre **y** está pausada: los dos ejes a la vez, que es el
+            # caso que una pantalla que sólo mira `estado` reporta como "todo
+            # bien".
             "beta": Instancia(slug="beta", nombre="Beta SRL", container="producto-beta",
-                              domain="beta.test", port=8082, plan="basico", estado="running"),
+                              domain="beta.test", port=8082, plan="basico", estado="running",
+                              servicio_estado="pausado", servicio_mensaje="Corte programado"),
             "caida": Instancia(slug="caida", nombre="Caída SA", container="producto-caida",
                                estado="exited"),
         }
@@ -130,6 +136,15 @@ class InventarioFalso:
         if slug not in self._instancias:
             raise InstanciaDesconocida(slug)
         return self._instancias[slug]
+
+    def reemplazar(self, slug, **campos):
+        """Refleja lo que el motor escribió en el `config.json` de la instancia.
+
+        Sin esto el inventario devuelve siempre la misma foto y un test de
+        «suspender» pasaría aunque el router no leyera nada de vuelta: estaría
+        asertando sobre el valor inicial, no sobre el efecto de la acción.
+        """
+        self._instancias[slug] = replace(self._instancias[slug], **campos)
 
 
 class _TransporteDeInstancias(httpx.AsyncBaseTransport):

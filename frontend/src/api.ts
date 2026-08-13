@@ -15,6 +15,8 @@ export type Superadmin = {
   username: string
 }
 
+export type ServicioEstado = 'activo' | 'pausado' | 'suspendido'
+
 export type Instancia = {
   slug: string
   nombre: string
@@ -22,9 +24,14 @@ export type Instancia = {
   domain: string
   port: number | string
   plan: string
+  // El contenedor: running, exited, sin contenedor…
   estado: string
   iniciado: string
   modulos_activos: number | null
+  // El corte comercial, que es otro eje: un contenedor `running` puede estar
+  // suspendido y devolverle 503 a todo el mundo.
+  servicio_estado: ServicioEstado
+  servicio_mensaje: string
 }
 
 // Lo que el alta acepta. Casi todo es opcional porque el motor tiene un default
@@ -103,8 +110,10 @@ export const backoffice = {
     api.put<Instancia>(`/api/instancias/${slug}`, datos),
   cambiarPlan: (slug: string, plan: string) =>
     api.put<Instancia>(`/api/instancias/${slug}/plan`, { plan }),
-  accion: (slug: string, accion: string) =>
-    api.post<Instancia>(`/api/instancias/${slug}/estado`, { accion }),
+  // `mensaje` sólo pesa en `pausar` y `suspender`; en `activar` el motor lo
+  // limpia, así que mandarlo o no da lo mismo.
+  accion: (slug: string, accion: string, mensaje = '') =>
+    api.post<Instancia>(`/api/instancias/${slug}/estado`, { accion, mensaje }),
   backup: (slug: string) => api.post<{ archivo: string }>(`/api/instancias/${slug}/backup`),
   // POST y no DELETE: la baja lleva un cuerpo obligatorio —la confirmación del
   // slug— y el `api-client` compartido manda DELETE sin cuerpo. Ver el
