@@ -60,7 +60,7 @@ export function EstadoServicio({ instancia, ocupado, onAplicar }: Props) {
         </CardTitle>
         <CardDescription>
           Controla el acceso de «{instancia.nombre || instancia.slug}» al sistema. No apaga el
-          contenedor: para eso están Iniciar / Detener, arriba.
+          contenedor: para eso están Iniciar / Detener, en la pestaña General.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid max-w-xl gap-4">

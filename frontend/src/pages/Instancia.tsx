@@ -1,12 +1,19 @@
-// Pantalla de UNA instancia: su ciclo de vida, su correo saliente y sus
-// usuarios.
+// Pantalla de UNA instancia: su ciclo de vida, su corte de servicio, su correo
+// saliente y sus usuarios.
 //
 // Todo lo que se puede tocar acá está debajo del nombre de la instancia, y eso
 // es deliberado: en un producto multi-cliente una pantalla de "correo
 // saliente" sin instancia a la vista es ambigua, y esa ambigüedad se paga
-// configurándole el servidor de correo al cliente equivocado.
+// configurándole el servidor de correo al cliente equivocado. Por eso la ficha
+// de identidad —nombre, los dos estados, slug/dominio/contenedor— queda FUERA
+// de las pestañas: se ve en las cuatro, no sólo en la primera.
+//
+// Los cuatro bloques estaban uno abajo del otro y ahora van en pestañas, con el
+// mismo conmutador que la pantalla de Configuración de los productos (ver
+// `components/Pestanas.tsx`).
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Mail, Power, Server, Users } from 'lucide-react'
 import { ConfiguracionSmtp } from 'libra-ui/ConfiguracionSmtp'
 import { Usuarios } from 'libra-ui/Usuarios'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +27,7 @@ import { variantePorEstado } from '@/lib/servicio'
 import { BajaInstancia } from '../components/BajaInstancia'
 import { EditarInstancia } from '../components/EditarInstancia'
 import { EstadoServicio } from '../components/EstadoServicio'
+import { Pestanas } from '../components/Pestanas'
 import {
   ApiError, backoffice, rutaSmtp, rutaUsuarios, type Instancia as TInstancia, type Plan,
 } from '../api'
@@ -104,6 +112,84 @@ export function Instancia() {
     )
   }
 
+  const general = (
+    <Card>
+      <CardHeader>
+        <CardTitle>Ciclo de vida y plan</CardTitle>
+        <CardDescription>
+          El contenedor de «{instancia.nombre || instancia.slug}», sus datos y su plan.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          {ACCIONES.map(({ accion, label }) => (
+            <Button
+              key={accion}
+              variant="outline"
+              size="sm"
+              disabled={ocupado}
+              onClick={() => ejecutar(() => backoffice.accion(slug, accion), `${label}: hecho.`)}
+            >
+              {label}
+            </Button>
+          ))}
+          <Button variant="outline" size="sm" disabled={ocupado} onClick={hacerBackup}>
+            Backup
+          </Button>
+          <EditarInstancia
+            instancia={instancia}
+            onEditada={async () => {
+              await releer()
+              setAviso('Datos actualizados.')
+            }}
+          />
+          <BajaInstancia
+            instancia={instancia}
+            onDadaDeBaja={(backup) =>
+              // La pantalla de una instancia que ya no existe no tiene qué
+              // mostrar, así que se sale de acá. El aviso viaja en el estado
+              // de la navegación porque la ruta del backup es la única copia
+              // que queda de los datos del cliente.
+              navegar('/instancias', {
+                replace: true,
+                state: {
+                  aviso: backup
+                    ? `Instancia «${instancia.slug}» dada de baja. Backup en ${backup}`
+                    : `Instancia «${instancia.slug}» dada de baja, sin backup.`,
+                },
+              })
+            }
+          />
+        </div>
+
+        {planes.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Plan</span>
+            <Select
+              value={instancia.plan || undefined}
+              disabled={ocupado}
+              onValueChange={(plan) =>
+                ejecutar(() => backoffice.cambiarPlan(slug, plan), 'Plan actualizado.')
+              }
+            >
+              <SelectTrigger className="w-56">
+                <SelectValue placeholder="Sin plan asignado" />
+              </SelectTrigger>
+              <SelectContent>
+                {planes.map((p) => (
+                  <SelectItem key={p.key} value={p.key}>
+                    {p.label}
+                    {p.precio != null && ` — $${p.precio.toLocaleString('es-AR')}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+
   return (
     <div className="space-y-6">
       <Card>
@@ -127,93 +213,54 @@ export function Instancia() {
             {instancia.container && ` · ${instancia.container}`}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {error && <p className="text-sm font-medium text-destructive">{error}</p>}
-          {aviso && <p className="text-sm font-medium text-primary">{aviso}</p>}
-
-          <div className="flex flex-wrap items-center gap-2">
-            {ACCIONES.map(({ accion, label }) => (
-              <Button
-                key={accion}
-                variant="outline"
-                size="sm"
-                disabled={ocupado}
-                onClick={() => ejecutar(() => backoffice.accion(slug, accion), `${label}: hecho.`)}
-              >
-                {label}
-              </Button>
-            ))}
-            <Button variant="outline" size="sm" disabled={ocupado} onClick={hacerBackup}>
-              Backup
-            </Button>
-            <EditarInstancia
-              instancia={instancia}
-              onEditada={async () => {
-                await releer()
-                setAviso('Datos actualizados.')
-              }}
-            />
-            <BajaInstancia
-              instancia={instancia}
-              onDadaDeBaja={(backup) =>
-                // La pantalla de una instancia que ya no existe no tiene qué
-                // mostrar, así que se sale de acá. El aviso viaja en el estado
-                // de la navegación porque la ruta del backup es la única copia
-                // que queda de los datos del cliente.
-                navegar('/instancias', {
-                  replace: true,
-                  state: {
-                    aviso: backup
-                      ? `Instancia «${instancia.slug}» dada de baja. Backup en ${backup}`
-                      : `Instancia «${instancia.slug}» dada de baja, sin backup.`,
-                  },
-                })
-              }
-            />
-          </div>
-
-          {planes.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Plan</span>
-              <Select
-                value={instancia.plan || undefined}
-                disabled={ocupado}
-                onValueChange={(plan) =>
-                  ejecutar(() => backoffice.cambiarPlan(slug, plan), 'Plan actualizado.')
-                }
-              >
-                <SelectTrigger className="w-56">
-                  <SelectValue placeholder="Sin plan asignado" />
-                </SelectTrigger>
-                <SelectContent>
-                  {planes.map((p) => (
-                    <SelectItem key={p.key} value={p.key}>
-                      {p.label}
-                      {p.precio != null && ` — $${p.precio.toLocaleString('es-AR')}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-        </CardContent>
+        {/* Los avisos van en la ficha, no dentro de la pestaña que los produjo:
+            «Backup creado: …» se dispara desde General y tiene que seguir
+            leyéndose si el siguiente click es Usuarios. */}
+        {(error || aviso) && (
+          <CardContent className="space-y-1">
+            {error && <p className="text-sm font-medium text-destructive">{error}</p>}
+            {aviso && <p className="text-sm font-medium text-primary">{aviso}</p>}
+          </CardContent>
+        )}
       </Card>
 
-      <EstadoServicio
-        instancia={instancia}
-        ocupado={ocupado}
-        onAplicar={(accion, mensaje, label) =>
-          ejecutar(
-            () => backoffice.accion(slug, accion, mensaje),
-            `Servicio: ${label.toLowerCase()}.`,
-          )
-        }
+      <Pestanas
+        etiqueta={`Secciones de la instancia ${instancia.slug}`}
+        pestanas={[
+          { clave: 'general', label: 'General', icono: Server, contenido: general },
+          {
+            clave: 'servicio',
+            label: 'Servicio',
+            icono: Power,
+            contenido: (
+              <EstadoServicio
+                instancia={instancia}
+                ocupado={ocupado}
+                onAplicar={(accion, mensaje, label) =>
+                  ejecutar(
+                    () => backoffice.accion(slug, accion, mensaje),
+                    `Servicio: ${label.toLowerCase()}.`,
+                  )
+                }
+              />
+            ),
+          },
+          // `basePath` por instancia: es lo que hace que estos dos componentes
+          // compartidos escriban en el cliente correcto.
+          {
+            clave: 'correo',
+            label: 'Correo',
+            icono: Mail,
+            contenido: <ConfiguracionSmtp basePath={rutaSmtp(slug)} />,
+          },
+          {
+            clave: 'usuarios',
+            label: 'Usuarios',
+            icono: Users,
+            contenido: <Usuarios basePath={rutaUsuarios(slug)} />,
+          },
+        ]}
       />
-
-      {/* `basePath` por instancia: es lo que hace que estos dos componentes
-          compartidos escriban en el cliente correcto. */}
-      <ConfiguracionSmtp basePath={rutaSmtp(slug)} />
-      <Usuarios basePath={rutaUsuarios(slug)} />
     </div>
   )
 }
