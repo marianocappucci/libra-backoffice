@@ -25,16 +25,28 @@ class ServiceErrorFalso(Exception):
     pass
 
 
+class AltaIncompletaFalso(ServiceErrorFalso):
+    """Como en libracore: subclase de `ServiceError`, no un tipo aparte.
+
+    La herencia es lo que hace que el orden de los `except` del router importe,
+    y por eso el falso la reproduce."""
+
+
 @pytest.fixture
 def servicios_falsos(inventario):
     """`libracore.admin.services` visto por el router."""
     llamadas = []
     servicios = types.SimpleNamespace()
     servicios.ServiceError = ServiceErrorFalso
+    servicios.AltaIncompletaError = AltaIncompletaFalso
 
     def crear_cliente(**kwargs):
         if kwargs.get("slug") == "acme":
             raise ServiceErrorFalso("Ya existe una instancia con ese slug.")
+        if kwargs.get("slug") == "sin-base":
+            raise AltaIncompletaFalso(
+                "La instancia 'sin-base' se creó pero su base nunca se armó."
+            )
         llamadas.append(("crear", kwargs))
         # El motor genera la contraseña cuando el alta viene sin una, y la
         # devuelve acá: es la única vez que sale del host.
@@ -142,6 +154,32 @@ def test_la_respuesta_del_alta_no_expone_la_ruta_del_host(admin):
 
 def test_alta_duplicada_es_422(admin):
     assert admin.post("/api/instancias", json={"nombre": "ACME", "slug": "acme"}).status_code == 422
+
+
+def test_un_alta_incompleta_es_409_y_no_422(admin):
+    """La instancia SÍ se creó, sólo que no quedó entregable.
+
+    El frontend lee un 422 como "el motor rechazó el alta, no se creó nada" y
+    deja el formulario listo para reintentar — pero el slug ya está tomado, así
+    que el reintento choca. Cualquier estado que no sea 422 cae en el camino que
+    ya existe: relee el inventario, encuentra la instancia nueva y avisa que no
+    se reintente.
+
+    Es lo que le faltó al alta de `lagrace` el 2026-08-13, que devolvió un 504
+    del proxy y por casualidad cayó en el camino correcto."""
+    r = admin.post("/api/instancias", json={"nombre": "Sin Base", "slug": "sin-base"})
+    assert r.status_code == 409, r.text
+    assert "sin-base" in r.json()["detail"]
+
+
+def test_el_409_no_se_lleva_puesto_al_422(admin):
+    """Contraprueba del ORDEN de los `except`. `AltaIncompletaError` es una
+    subclase de `ServiceError`: si el `except` genérico fuera primero se comería
+    al específico y todo volvería a ser 422 — con el test de arriba en rojo pero
+    éste en verde, que es lo que distingue "se rompió el orden" de "se rompió el
+    mapeo"."""
+    r = admin.post("/api/instancias", json={"nombre": "ACME", "slug": "acme"})
+    assert r.status_code == 422, r.text
 
 
 def test_editar(admin):
