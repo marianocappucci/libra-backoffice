@@ -31,6 +31,13 @@ class Instancia:
     estado: str = "desconocido"
     iniciado: str = ""
     modulos_activos: int | None = None
+    # Corte comercial, distinto de `estado`. `estado` es el contenedor (running
+    # / exited); `servicio_estado` es si el cliente puede usar el sistema. Un
+    # contenedor `running` suspendido devuelve 503 a todo, así que mostrar sólo
+    # uno de los dos ejes da una pantalla que dice "todo bien" sobre un cliente
+    # que no puede entrar.
+    servicio_estado: str = "activo"
+    servicio_mensaje: str = ""
 
     def dict(self) -> dict:
         return asdict(self)
@@ -65,6 +72,11 @@ class Inventario:
             domain=c.get("domain", ""), port=c.get("port", ""), plan=c.get("plan", ""),
             estado=c.get("estado", "desconocido"), iniciado=c.get("iniciado", ""),
             modulos_activos=c.get("modulos_activos"),
+            # `or` y no un default del `.get`: una libracore vieja devuelve la
+            # clave ausente, pero un `config.json` con el campo vacío devuelve
+            # "" — y una instancia sin corte configurado está activa.
+            servicio_estado=c.get("servicio_estado") or "activo",
+            servicio_mensaje=c.get("servicio_mensaje") or "",
         )
 
 

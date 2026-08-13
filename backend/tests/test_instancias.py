@@ -60,10 +60,22 @@ def servicios_falsos(inventario):
             raise ServiceErrorFalso(f"Plan inválido: {plan!r}.")
         llamadas.append(("plan", slug, plan))
 
-    def accion_estado(slug, accion):
-        if accion not in ("start", "stop", "restart"):
+    ESTADOS_DE_SERVICIO = {"pausar": "pausado", "suspender": "suspendido", "activar": "activo"}
+
+    def accion_estado(slug, accion, mensaje=""):
+        if accion not in ("start", "stop", "restart") and accion not in ESTADOS_DE_SERVICIO:
             raise ServiceErrorFalso(f"Acción inválida: {accion!r}.")
-        llamadas.append(("estado", slug, accion))
+        llamadas.append(("estado", slug, accion, mensaje))
+        if accion in ESTADOS_DE_SERVICIO:
+            # El motor escribe el `config.json` de la instancia; acá se refleja
+            # en el inventario para que la respuesta del router lo devuelva. Es
+            # lo que hace que estos tests midan el ida y vuelta y no el valor
+            # con el que arrancó la instancia falsa.
+            inventario.reemplazar(
+                slug,
+                servicio_estado=ESTADOS_DE_SERVICIO[accion],
+                servicio_mensaje="" if accion == "activar" else mensaje,
+            )
 
     servicios.crear_cliente = crear_cliente
     servicios.editar_cliente = editar_cliente
@@ -163,11 +175,58 @@ def test_plan_valido(admin, servicios_falsos):
 
 def test_accion_de_estado(admin, servicios_falsos):
     assert admin.post("/api/instancias/acme/estado", json={"accion": "restart"}).status_code == 200
-    assert ("estado", "acme", "restart") in servicios_falsos.llamadas
+    assert ("estado", "acme", "restart", "") in servicios_falsos.llamadas
 
 
 def test_accion_invalida(admin):
     assert admin.post("/api/instancias/acme/estado", json={"accion": "formatear"}).status_code == 422
+
+
+# ── corte de servicio ────────────────────────────────────────────────────────
+#
+# Es la palanca comercial, y hasta ahora vivía en la pantalla de Configuración
+# del propio producto: el cliente al que se le corta el servicio era quien la
+# tenía a mano.
+
+def test_el_inventario_expone_el_corte_de_servicio(admin):
+    """`estado` y `servicio_estado` son dos ejes, y los dos tienen que salir.
+
+    `beta` corre (`running`) y está pausada. Una respuesta que sólo trajera
+    `estado` deja al backoffice sin forma de mostrar que ese cliente está
+    cortado.
+    """
+    instancias = {i["slug"]: i for i in admin.get("/api/instancias").json()["instancias"]}
+    assert instancias["beta"]["estado"] == "running"
+    assert instancias["beta"]["servicio_estado"] == "pausado"
+    assert instancias["beta"]["servicio_mensaje"] == "Corte programado"
+    assert instancias["acme"]["servicio_estado"] == "activo"
+
+
+def test_suspender_lleva_el_mensaje_al_motor(admin, servicios_falsos):
+    resp = admin.post("/api/instancias/acme/estado",
+                      json={"accion": "suspender", "mensaje": "Factura de agosto impaga"})
+    assert resp.status_code == 200
+    assert ("estado", "acme", "suspender", "Factura de agosto impaga") in servicios_falsos.llamadas
+    # Y la respuesta trae el estado ya aplicado: la pantalla se refresca con
+    # esto, no con lo que tenía cargado el formulario.
+    assert resp.json()["servicio_estado"] == "suspendido"
+    assert resp.json()["servicio_mensaje"] == "Factura de agosto impaga"
+
+
+def test_activar_borra_el_mensaje(admin):
+    """El cliente que ya pagó no puede seguir viendo «falta de pago»."""
+    admin.post("/api/instancias/acme/estado",
+               json={"accion": "suspender", "mensaje": "Falta de pago"})
+    cuerpo = admin.post("/api/instancias/acme/estado", json={"accion": "activar"}).json()
+    assert cuerpo["servicio_estado"] == "activo"
+    assert cuerpo["servicio_mensaje"] == ""
+
+
+def test_pausar_sin_mensaje_es_valido(admin, servicios_falsos):
+    """El mensaje es opcional: pausar sin texto tiene que seguir funcionando."""
+    assert admin.post("/api/instancias/acme/estado",
+                      json={"accion": "pausar"}).status_code == 200
+    assert ("estado", "acme", "pausar", "") in servicios_falsos.llamadas
 
 
 def test_backup(admin):
@@ -219,3 +278,25 @@ def test_inventario_libracore_usa_admin_services(tmp_path, monkeypatch):
     assert instancias[0].slug == "acme"
     assert instancias[0].container == "prod-acme"
     assert instancias[0].estado == "running"
+
+
+def test_la_libracore_instalada_entiende_el_mensaje_del_corte():
+    """El pin de LibraCore de este repo tiene que soportar lo que el router usa.
+
+    Todo lo de arriba corre contra `servicios_falsos`, así que un pin viejo da
+    la suite entera en verde y falla recién en producción, con un `TypeError`
+    dentro del panel. **Ya pasó**: el 2026-08-12 los seis paneles devolvían 500
+    porque el pin de acá (v1.3.0) no entendía el `configure(backup_zip=True)`
+    que los productos empezaron a pasar. Este test es el mismo acoplamiento
+    mirado desde el otro lado.
+    """
+    import inspect
+
+    from libracore.admin import services
+
+    firma = inspect.signature(services.accion_estado)
+    assert "mensaje" in firma.parameters, (
+        "La libracore instalada no acepta `mensaje` en accion_estado: el corte "
+        "de servicio del backoffice le borraría el texto al cliente. Hace falta "
+        "subir el pin de libracore en backend/pyproject.toml."
+    )

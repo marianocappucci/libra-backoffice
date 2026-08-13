@@ -15,9 +15,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { variantePorEstado } from '@/lib/servicio'
 
 import { BajaInstancia } from '../components/BajaInstancia'
 import { EditarInstancia } from '../components/EditarInstancia'
+import { EstadoServicio } from '../components/EstadoServicio'
 import {
   ApiError, backoffice, rutaSmtp, rutaUsuarios, type Instancia as TInstancia, type Plan,
 } from '../api'
@@ -27,6 +29,10 @@ function describirError(err: unknown): string {
   return 'Error de conexión.'
 }
 
+// Sólo el ciclo de vida del contenedor. El corte de servicio (pausar /
+// suspender / activar) va en su propia tarjeta: comparte endpoint con estas
+// tres pero no es lo mismo, y un botón «Suspender» al lado de «Detener» invita
+// justo a la confusión que hay que evitar.
 const ACCIONES = [
   { accion: 'start', label: 'Iniciar' },
   { accion: 'stop', label: 'Detener' },
@@ -107,6 +113,13 @@ export function Instancia() {
             <Badge variant={instancia.estado === 'running' ? 'default' : 'outline'}>
               {instancia.estado}
             </Badge>
+            {/* Los dos ejes juntos y sólo acá: un contenedor `running`
+                suspendido no puede leerse como "todo bien". */}
+            {instancia.servicio_estado !== 'activo' && (
+              <Badge variant={variantePorEstado(instancia.servicio_estado)}>
+                {instancia.servicio_estado}
+              </Badge>
+            )}
           </CardTitle>
           <CardDescription>
             {instancia.slug}
@@ -185,6 +198,17 @@ export function Instancia() {
           )}
         </CardContent>
       </Card>
+
+      <EstadoServicio
+        instancia={instancia}
+        ocupado={ocupado}
+        onAplicar={(accion, mensaje, label) =>
+          ejecutar(
+            () => backoffice.accion(slug, accion, mensaje),
+            `Servicio: ${label.toLowerCase()}.`,
+          )
+        }
+      />
 
       {/* `basePath` por instancia: es lo que hace que estos dos componentes
           compartidos escriban en el cliente correcto. */}
