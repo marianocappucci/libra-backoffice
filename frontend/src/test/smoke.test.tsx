@@ -104,6 +104,16 @@ function montar(ruta: string) {
   )
 }
 
+/** Las secciones de la instancia son pestañas y **sólo se monta la activa**, así
+ *  que casi todo test de esta pantalla arranca por acá. Se busca dentro del nav
+ *  a propósito: «Usuarios» también es el título de la tarjeta que la pestaña
+ *  abre, y `getByRole('button')` a secas terminaría matcheando lo que sea que
+ *  libra-ui ponga adentro. */
+async function irAPestana(u: ReturnType<typeof usuario>, label: RegExp) {
+  const nav = await screen.findByRole('navigation', { name: /secciones de la instancia/i })
+  await u.click(within(nav).getByRole('button', { name: label }))
+}
+
 describe('guard de rutas', () => {
   it('sin sesión manda al login', async () => {
     sinSesion()
@@ -128,23 +138,37 @@ describe('guard de rutas', () => {
 describe('pantalla de una instancia', () => {
   it('pide el SMTP y los usuarios DE ESA instancia', async () => {
     conSesion()
+    const u = usuario()
     montar('/instancias/acme')
 
+    await irAPestana(u, /^correo$/i)
     await waitFor(() => {
-      const urls = fetchMock.mock.calls.map((c) => String(c[0]))
-      expect(urls).toContain('/api/instancias/acme/smtp')
-      expect(urls).toContain('/api/instancias/acme/usuarios')
+      expect(fetchMock.mock.calls.map((c) => String(c[0]))).toContain('/api/instancias/acme/smtp')
+    })
+
+    await irAPestana(u, /^usuarios$/i)
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.map((c) => String(c[0]))).toContain('/api/instancias/acme/usuarios')
     })
   })
 
   it('nunca pide un endpoint global, sin instancia', async () => {
     conSesion()
+    const u = usuario()
     montar('/instancias/acme')
 
-    await waitFor(() => {
-      expect(fetchMock.mock.calls.length).toBeGreaterThan(2)
+    // Hay que abrir las dos pestañas: si no, el test pasaría sin que el SMTP y
+    // los usuarios se hubieran pedido nunca, que es la forma más barata de que
+    // un `not.toContain` diga que sí sin haber probado nada.
+    await irAPestana(u, /^correo$/i)
+    await irAPestana(u, /^usuarios$/i)
+
+    const urls = await waitFor(() => {
+      const vistas = fetchMock.mock.calls.map((c) => String(c[0]))
+      expect(vistas).toContain('/api/instancias/acme/smtp')
+      expect(vistas).toContain('/api/instancias/acme/usuarios')
+      return vistas
     })
-    const urls = fetchMock.mock.calls.map((c) => String(c[0]))
     expect(urls).not.toContain('/api/smtp')
     expect(urls).not.toContain('/api/usuarios')
   })
@@ -153,6 +177,54 @@ describe('pantalla de una instancia', () => {
     conSesion()
     montar('/instancias/acme')
     expect(await screen.findByText('ACME SA')).toBeInTheDocument()
+  })
+})
+
+// ── Las pestañas ────────────────────────────────────────────────────────────
+//
+// Los cuatro bloques estaban apilados. Lo que se prueba acá es lo que cambia
+// con el conmutador: que arranque en General, que la pestaña viaje en la URL
+// (para poder mandar el link de una sección por mensaje) y que la ficha de la
+// instancia se siga viendo en todas.
+
+describe('pestañas de la instancia', () => {
+  it('arranca en General y no monta las otras secciones', async () => {
+    conSesion()
+    montar('/instancias/acme')
+
+    expect(await screen.findByRole('button', { name: /^editar$/i })).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: /^estado$/i })).not.toBeInTheDocument()
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]))
+    expect(urls).not.toContain('/api/instancias/acme/smtp')
+  })
+
+  it('la sección pedida por la URL es la que abre', async () => {
+    conSesion()
+    montar('/instancias/acme?seccion=servicio')
+
+    expect(await screen.findByRole('combobox', { name: /^estado$/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^editar$/i })).not.toBeInTheDocument()
+  })
+
+  it('una sección que no existe cae en General en vez de dejar la pantalla vacía', async () => {
+    conSesion()
+    montar('/instancias/acme?seccion=la-que-se-renombro')
+
+    expect(await screen.findByRole('button', { name: /^editar$/i })).toBeInTheDocument()
+  })
+
+  it('la ficha de la instancia se ve en todas las pestañas', async () => {
+    // El motivo de que la ficha quede fuera del conmutador: configurar el
+    // correo sin el nombre del cliente a la vista es configurárselo al
+    // equivocado.
+    conSesion()
+    const u = usuario()
+    montar('/instancias/acme')
+
+    for (const pestana of [/^servicio$/i, /^correo$/i, /^usuarios$/i]) {
+      await irAPestana(u, pestana)
+      expect(screen.getByText('ACME SA')).toBeInTheDocument()
+    }
   })
 })
 
@@ -174,7 +246,7 @@ describe('corte de servicio', () => {
       'POST /api/instancias/acme/estado': () => Promise.resolve(json(SUSPENDIDA)),
     })
     const u = usuario()
-    montar('/instancias/acme')
+    montar('/instancias/acme?seccion=servicio')
 
     await u.click(await screen.findByRole('combobox', { name: /^estado$/i }))
     await u.click(await screen.findByRole('option', { name: /suspendido/i }))
@@ -196,7 +268,7 @@ describe('corte de servicio', () => {
       'POST /api/instancias/acme/estado': () => Promise.resolve(json(INSTANCIA)),
     })
     const u = usuario()
-    montar('/instancias/acme')
+    montar('/instancias/acme?seccion=servicio')
 
     expect(await screen.findByDisplayValue('Factura de agosto impaga')).toBeInTheDocument()
     await u.click(screen.getByRole('combobox', { name: /^estado$/i }))
@@ -212,7 +284,7 @@ describe('corte de servicio', () => {
 
   it('el mensaje no se pide cuando el estado es Activo', async () => {
     conSesion()
-    montar('/instancias/acme')
+    montar('/instancias/acme?seccion=servicio')
     await screen.findByRole('combobox', { name: /^estado$/i })
     expect(screen.queryByLabelText(/mensaje para el cliente/i)).not.toBeInTheDocument()
   })
