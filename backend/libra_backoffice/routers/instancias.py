@@ -123,6 +123,19 @@ def crear(datos: InstanciaIn, request: Request):
     servicios = _servicios(request)
     try:
         return servicios.crear_cliente(**datos.model_dump())
+    # 🔴 409 y no 422: la instancia SÍ se creó, sólo que no quedó entregable
+    # (su base no subió, o no se pudo aplicar el plan). El frontend lee un 422
+    # como "el motor rechazó el alta, no se creó nada" y deja el formulario
+    # listo para reintentar — pero el slug ya está tomado, así que el reintento
+    # choca. Con cualquier estado que no sea 422 cae en el camino que ya
+    # existe: relee el inventario, encuentra la instancia nueva y avisa que no
+    # se reintente.
+    #
+    # `getattr` porque el atributo lo agrega libracore v1.35.0: contra una
+    # versión anterior no existe y esto tiene que seguir compilando. Una tupla
+    # vacía nunca matchea, así que degrada al `except` de abajo.
+    except getattr(servicios, "AltaIncompletaError", ()) as exc:
+        raise HTTPException(409, str(exc))
     except servicios.ServiceError as exc:
         raise HTTPException(422, str(exc))
 
