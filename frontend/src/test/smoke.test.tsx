@@ -32,6 +32,7 @@ const INSTANCIA = {
   slug: 'acme', nombre: 'ACME SA', container: 'producto-acme',
   domain: 'acme.test', port: 8081, plan: 'pro', estado: 'running',
   iniciado: '', modulos_activos: null,
+  servicio_estado: 'activo', servicio_mensaje: '',
 }
 
 const SMTP = {
@@ -152,6 +153,79 @@ describe('pantalla de una instancia', () => {
     conSesion()
     montar('/instancias/acme')
     expect(await screen.findByText('ACME SA')).toBeInTheDocument()
+  })
+})
+
+// ── Corte de servicio ───────────────────────────────────────────────────────
+//
+// Vino de la pantalla de Configuración de Contalibra y Restolibra, donde el
+// admin del cliente la tenía a mano: un cliente pausado se despausaba solo. Lo
+// que se prueba acá es que el botón termine en la request correcta, con el
+// mensaje, y que el estado que se muestra salga de la respuesta.
+
+/** Una instancia suspendida, para las pantallas que tienen que distinguirla. */
+const SUSPENDIDA = {
+  ...INSTANCIA, servicio_estado: 'suspendido', servicio_mensaje: 'Factura de agosto impaga',
+}
+
+describe('corte de servicio', () => {
+  it('suspende con el mensaje que se escribió', async () => {
+    conSesion({
+      'POST /api/instancias/acme/estado': () => Promise.resolve(json(SUSPENDIDA)),
+    })
+    const u = usuario()
+    montar('/instancias/acme')
+
+    await u.click(await screen.findByRole('combobox', { name: /^estado$/i }))
+    await u.click(await screen.findByRole('option', { name: /suspendido/i }))
+    await u.type(screen.getByLabelText(/mensaje para el cliente/i), 'Factura de agosto impaga')
+    await u.click(screen.getByRole('button', { name: /^aplicar$/i }))
+
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => String(c[0]).endsWith('/acme/estado'))
+      expect(post).toBeDefined()
+      expect(cuerpoDe(post!)).toEqual({ accion: 'suspender', mensaje: 'Factura de agosto impaga' })
+    })
+  })
+
+  it('activar no arrastra el mensaje del corte anterior', async () => {
+    // El motor lo limpia, pero el formulario tiene el texto cargado: si lo
+    // mandara, cualquier cambio del lado del motor lo re-guardaría.
+    conSesion({
+      'GET /api/instancias/acme': () => Promise.resolve(json(SUSPENDIDA)),
+      'POST /api/instancias/acme/estado': () => Promise.resolve(json(INSTANCIA)),
+    })
+    const u = usuario()
+    montar('/instancias/acme')
+
+    expect(await screen.findByDisplayValue('Factura de agosto impaga')).toBeInTheDocument()
+    await u.click(screen.getByRole('combobox', { name: /^estado$/i }))
+    await u.click(await screen.findByRole('option', { name: /activo/i }))
+    await u.click(screen.getByRole('button', { name: /^aplicar$/i }))
+
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => String(c[0]).endsWith('/acme/estado'))
+      expect(post).toBeDefined()
+      expect(cuerpoDe(post!)).toEqual({ accion: 'activar', mensaje: '' })
+    })
+  })
+
+  it('el mensaje no se pide cuando el estado es Activo', async () => {
+    conSesion()
+    montar('/instancias/acme')
+    await screen.findByRole('combobox', { name: /^estado$/i })
+    expect(screen.queryByLabelText(/mensaje para el cliente/i)).not.toBeInTheDocument()
+  })
+
+  it('un contenedor running suspendido no se muestra como si estuviera bien', async () => {
+    // El caso que motiva tener los dos ejes: `estado` sigue diciendo `running`
+    // porque el contenedor efectivamente corre — devolviendo 503 a todo.
+    conSesion({ 'GET /api/instancias': () => Promise.resolve(json({ instancias: [SUSPENDIDA] })) })
+    montar('/instancias')
+
+    expect(await screen.findByText('ACME SA')).toBeInTheDocument()
+    expect(screen.getByText('running')).toBeInTheDocument()
+    expect(screen.getByText('suspendido')).toBeInTheDocument()
   })
 })
 

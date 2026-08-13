@@ -37,7 +37,15 @@ dependencies = [
     # paquete se entera recien cuando alguien abre el panel. Y como el import
     # queda cacheado en `sys.modules`, el proceso viejo lo tapa hasta el
     # siguiente reinicio.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.34.0",
+    #
+    # v1.35.0: `_enrich` devuelve el estado de servicio de cada instancia y
+    # `accion_estado` acepta el mensaje que ve el cliente. Sin este bump el
+    # corte de servicio de este backoffice le borra el texto al cliente y la
+    # pantalla no puede mostrar quien esta cortado —y la suite no lo nota,
+    # porque corre contra dobles—. Lo cubre
+    # `test_la_libracore_instalada_entiende_el_mensaje_del_corte`, que mira la
+    # firma de la libracore **instalada**.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.35.0",
     "fastapi>=0.111,<1",
     "uvicorn[standard]>=0.30,<1",
     # El control plane le habla a cada instancia por HTTP.

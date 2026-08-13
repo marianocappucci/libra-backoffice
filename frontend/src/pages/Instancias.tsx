@@ -59,8 +59,22 @@ export function Instancias() {
       { accessorKey: 'plan', header: sortableHeader('Plan') },
       {
         accessorKey: 'estado',
-        header: 'Estado',
+        header: 'Contenedor',
         cell: ({ row }) => <VarianteEstado estado={row.original.estado} />,
+      },
+      {
+        // Columna propia y no un badge más en «Contenedor»: son dos ejes
+        // independientes. Un cliente suspendido corre igual —el contenedor
+        // dice `running`— y le devuelve 503 a todo el mundo. Sin esta columna
+        // el listado de un producto con un cliente cortado se ve idéntico al
+        // de uno donde está todo bien.
+        accessorKey: 'servicio_estado',
+        header: sortableHeader('Servicio'),
+        cell: ({ row }) => {
+          const estado = row.original.servicio_estado
+          if (estado === 'activo') return <span className="text-muted-foreground">activo</span>
+          return <Badge variant={estado === 'suspendido' ? 'destructive' : 'secondary'}>{estado}</Badge>
+        },
       },
       {
         id: 'acciones',

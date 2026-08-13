@@ -60,6 +60,10 @@ class PlanIn(BaseModel):
 
 class EstadoIn(BaseModel):
     accion: str
+    # Sólo lo usan `pausar` y `suspender`: es el texto que ve el cliente en el
+    # banner de aviso o en la pantalla de suspensión. `activar` lo ignora y el
+    # motor lo limpia.
+    mensaje: str = ""
 
 
 class BajaIn(BaseModel):
@@ -146,7 +150,7 @@ def cambiar_plan(slug: str, datos: PlanIn, request: Request):
 def cambiar_estado(slug: str, datos: EstadoIn, request: Request):
     servicios = _servicios(request)
     try:
-        servicios.accion_estado(slug, datos.accion)
+        servicios.accion_estado(slug, datos.accion, mensaje=datos.mensaje)
     except servicios.ServiceError as exc:
         raise HTTPException(422, str(exc))
     return _obtener(request, slug).dict()
