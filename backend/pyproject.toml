@@ -45,7 +45,18 @@ dependencies = [
     # porque corre contra dobles—. Lo cubre
     # `test_la_libracore_instalada_entiende_el_mensaje_del_corte`, que mira la
     # firma de la libracore **instalada**.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.35.0",
+    #
+    # 🔴 v1.36.0: el alta genera instancias que ARRANCAN. Hasta v1.35.0 el
+    # compose salia con `DATABASE_URL=postgresql://` sin driver, sin las
+    # credenciales de admin con el nombre prefijado que lee libraauth, y sin
+    # `LIBRA_SERVICE_TOKEN` — o sea que la instancia quedaba en crash loop y,
+    # aun arrancando, este backoffice no podia administrarla. Y trae
+    # `AltaIncompletaError`, que este repo mapea a 409.
+    #
+    # **Este bump es el que hace util al alta**: el provisioning corre ACA
+    # ADENTRO, asi que el pin de los productos (v1.33.0) no interviene. Sin
+    # este bump el fix no llega a ningun lado.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.36.0",
     "fastapi>=0.111,<1",
     "uvicorn[standard]>=0.30,<1",
     # El control plane le habla a cada instancia por HTTP.
