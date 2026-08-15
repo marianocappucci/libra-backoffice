@@ -28,6 +28,109 @@ def test_salud_pide_sesion(cliente):
     assert cliente.get("/api/salud").status_code == 401
 
 
+# El chequeo mira el cuerpo, no sólo el 200 — ver el docstring de `routers/salud.py`.
+# `_app` se define más abajo, en la sección de feature flags; Python lo resuelve
+# al llamar, así que estos tests quedan junto al resto de los de salud.
+
+def _instancia_que_solo_sirve_la_spa():
+    """Una instancia con la API muerta y el frontend horneado en la imagen.
+
+    Es exactamente la forma de los seis productos: el catch-all de la SPA
+    contesta `index.html` con **200** en cualquier ruta, `/health` incluida. Es
+    el caso que la pantalla tiene que poder reportar y no podía.
+    """
+    from fastapi import FastAPI
+    from fastapi.responses import HTMLResponse
+
+    app = FastAPI()
+
+    @app.get("/{camino:path}")
+    def catch_all(camino: str):
+        return HTMLResponse("<!doctype html><div id=root></div>")
+
+    return app
+
+
+def _instancia_con_health_que_no_es_objeto():
+    """200 con JSON válido que **no** es un objeto.
+
+    Separa las dos mitades del criterio: `resp.json()` no revienta —la cadena
+    `"ok"` es JSON perfectamente válido—, así que sin el `isinstance(dict)` esto
+    pasaría por sano.
+    """
+    from fastapi import FastAPI
+
+    app = FastAPI()
+
+    @app.get("/health")
+    def health():
+        return "ok"
+
+    return app
+
+
+def _salud_con(tmp_path, instancias_falsas, inventario, app_de_acme):
+    c = _app(
+        tmp_path,
+        {**instancias_falsas, "producto-acme": app_de_acme},
+        inventario,
+        ("instancias", "smtp", "usuarios", "salud"),
+    )
+    return {i["slug"]: i for i in c.get("/api/salud").json()["instancias"]}
+
+
+def test_una_instancia_que_solo_sirve_la_spa_no_es_ok(tmp_path, instancias_falsas, inventario):
+    """🔴 El caso que motivó el arreglo.
+
+    Con `esperar_json=False` esto daba `ok`: el chequeo miraba el 200, y el 200
+    lo contesta el fallback del frontend aunque la API no exista.
+    """
+    estados = _salud_con(
+        tmp_path, instancias_falsas, inventario, _instancia_que_solo_sirve_la_spa()
+    )
+
+    assert estados["acme"]["estado"] == "error"
+    assert "no es JSON" in estados["acme"]["detalle"]
+    # Control: la de al lado, sana, sigue leyéndose ok. Sin esto, un chequeo que
+    # rompiera *todas* las instancias pasaría este test igual.
+    assert estados["beta"]["estado"] == "ok"
+
+
+def test_un_health_que_no_devuelve_un_objeto_tampoco_es_ok(
+    tmp_path, instancias_falsas, inventario
+):
+    estados = _salud_con(
+        tmp_path, instancias_falsas, inventario, _instancia_con_health_que_no_es_objeto()
+    )
+
+    assert estados["acme"]["estado"] == "error"
+    assert "no es un objeto JSON (str)" in estados["acme"]["detalle"]
+    assert estados["beta"]["estado"] == "ok"
+
+
+@pytest.mark.parametrize("forma", [
+    {"status": "ok"},                                              # contalibra, restolibra
+    {"ok": True, "product": "gestiolibra"},                        # gestiolibra, medlibra, ventalibra
+    {"status": "ok", "timestamp": "2026-08-15T20:28:44+00:00"},    # libradesk
+])
+def test_las_tres_formas_de_health_de_la_familia_pasan_igual(
+    tmp_path, instancias_falsas, inventario, forma
+):
+    """No se exige ninguna clave, a propósito.
+
+    Los seis productos devuelven tres formas distintas —medidas contra las 18
+    instancias del VPS el 2026-08-15—. Pedir `status`, o pedir `ok`, habría
+    puesto en rojo a productos sanos, que es el error opuesto y se nota menos.
+    """
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    app.get("/health")(lambda: forma)
+
+    estados = _salud_con(tmp_path, instancias_falsas, inventario, app)
+    assert estados["acme"]["estado"] == "ok"
+
+
 # ── Feature flags ───────────────────────────────────────────────────────────
 
 def _app(tmp_path, instancias_falsas, inventario, features):
@@ -94,11 +197,16 @@ def test_settings_completo():
 
 
 def test_health_path_configurable():
-    """LibraDesk sirve su health en `/api/health`. Con el default, el chequeo
-    caía en el fallback de su SPA y devolvía 200 con HTML — un 'ok' que no
-    había tocado la app."""
-    s = cargar_settings({**BASE, "HEALTH_PATH": "/api/health"})
-    assert s.health_path == "/api/health"
+    """La ruta se puede mover, aunque hoy ningún producto la mueva.
+
+    Esto existía porque LibraDesk servía su health en `/api/health`. **Ya no**:
+    la ruta se normalizó a `/health` en toda la familia el 2026-08-12, y medido
+    contra el VPS el 2026-08-15 los seis backoffice apuntan ahí (tres explícito,
+    tres por el default). Se conserva la costura porque el día que un producto
+    la mueva, apuntar mal ya no da un falso 'ok': el chequeo mira el cuerpo.
+    """
+    s = cargar_settings({**BASE, "HEALTH_PATH": "/api/salud-interna"})
+    assert s.health_path == "/api/salud-interna"
 
 
 def test_falta_product_slug():
