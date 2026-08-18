@@ -12,7 +12,7 @@ dependencies = [
     # `AdminAuth` (sesion del superadmin del backoffice) y el guard de token de
     # servicio (v0.7.0), que es lo que permite administrar N instancias sin ser
     # usuario de ninguna.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.7.0",
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.26.0",
     # `admin.services` (inventario y ciclo de vida de instancias) y
     # `security_headers`. v1.3.0: el alta ya no elige un puerto que otro
     # producto del host tiene bindeado, y hace rollback del directorio si el

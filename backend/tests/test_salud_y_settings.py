@@ -13,7 +13,7 @@ from .conftest import PASSWORD, TOKEN, USUARIO, construir_settings
 def test_salud_reporta_arranque_y_features(logueado):
     cuerpo = logueado.get("/api/salud").json()
     assert cuerpo["producto"]["slug"] == "gestiolibra"
-    assert cuerpo["features"] == ["instancias", "salud", "smtp", "usuarios"]
+    assert cuerpo["features"] == ["demos", "instancias", "salud", "smtp", "usuarios"]
     assert cuerpo["backoffice"]["uptime_segundos"] >= 0
 
 

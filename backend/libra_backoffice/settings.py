@@ -18,7 +18,9 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-FEATURES_VALIDAS = frozenset({"instancias", "smtp", "usuarios", "salud"})
+FEATURES_VALIDAS = frozenset(
+    {"instancias", "smtp", "usuarios", "salud", "demos"}
+)
 
 
 class ConfiguracionInvalida(RuntimeError):
@@ -44,6 +46,11 @@ class Settings:
     # salud caía en el fallback de la SPA y devolvía 200 con HTML: un "ok" que
     # no había tocado la app.
     health_path: str = "/health"
+    # Los codigos de acceso a la demo publica (libraauth v0.26.0). La ruta la
+    # monta **solo la instancia demo**, asi que en cualquier otra este proxy
+    # recibe un 404 de la instancia — que es la respuesta correcta y la que la
+    # pantalla traduce a "esta instancia no es una demo".
+    demo_codigos_path: str = "/admin/demo-codigos"
     service_token: str = ""
     timeout_instancia: float = 5.0
 
@@ -55,7 +62,7 @@ class Settings:
     @property
     def features_por_instancia(self) -> list[str]:
         """Las que se resuelven hablándole a una instancia, no al host."""
-        return [f for f in ("smtp", "usuarios") if f in self.features]
+        return [f for f in ("smtp", "usuarios", "demos") if f in self.features]
 
 
 def _leer_features(crudo: str) -> frozenset[str]:
@@ -102,7 +109,7 @@ def cargar_settings(env: dict | None = None) -> Settings:
         )
 
     token = (env.get("LIBRA_SERVICE_TOKEN") or "").strip()
-    if features & {"smtp", "usuarios"} and not token:
+    if features & {"smtp", "usuarios", "demos"} and not token:
         raise ConfiguracionInvalida(
             "Las features 'smtp' y 'usuarios' se resuelven hablándole a la API de cada "
             "instancia y necesitan LIBRA_SERVICE_TOKEN — el mismo valor que tienen "
@@ -117,6 +124,8 @@ def cargar_settings(env: dict | None = None) -> Settings:
         db_filename=db_filename,
         instancia_puerto=int(env.get("INSTANCIA_PUERTO") or 8000),
         smtp_path=(env.get("SMTP_PATH") or "/admin/smtp").strip(),
+        demo_codigos_path=(
+            env.get("DEMO_CODIGOS_PATH") or "/admin/demo-codigos").strip(),
         users_path=(env.get("USERS_PATH") or "/users").strip(),
         health_path=(env.get("HEALTH_PATH") or "/health").strip(),
         service_token=token,
