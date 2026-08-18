@@ -68,6 +68,7 @@ def create_app(
     app.include_router(instancias.router)
     app.include_router(config_instancia.router_smtp)
     app.include_router(config_instancia.router_usuarios)
+    app.include_router(config_instancia.router_demos)
     app.include_router(salud.router)
 
     _montar_frontend(app, frontend_dist)

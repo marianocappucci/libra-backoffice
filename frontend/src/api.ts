@@ -128,3 +128,7 @@ export const backoffice = {
 // correo al cliente correcto y al equivocado.
 export const rutaSmtp = (slug: string) => `/api/instancias/${slug}/smtp`
 export const rutaUsuarios = (slug: string) => `/api/instancias/${slug}/usuarios`
+// Los códigos de acceso a la demo. Misma regla: es por instancia, porque la
+// demo de un producto es una instancia más y sus códigos no valen en otra.
+export const rutaCodigosDemo = (slug: string) =>
+  `/api/instancias/${slug}/demo-codigos`

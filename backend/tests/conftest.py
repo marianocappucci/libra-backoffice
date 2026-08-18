@@ -17,8 +17,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from libraauth.models import Base as AuthBase
 from libraauth.repository import UserRepository, UsernameTaken
+from libraauth.demo_codigos import DemoCodigoRepository
 from libraauth.session_auth import (
     SERVICE_TOKEN_ENV,
+    build_demo_codigos_router,
     build_smtp_settings_router,
     json_api_require_admin_o_servicio,
 )
@@ -63,9 +65,16 @@ class _UsuarioUpdate(BaseModel):
     active: bool
 
 
-def construir_instancia_falsa(db_path):
+def construir_instancia_falsa(db_path, *, es_demo=False):
     """Una instancia de producto: router de SMTP de libraauth + router de
-    usuarios propio, que es exactamente cómo están los seis."""
+    usuarios propio, que es exactamente cómo están los seis.
+
+    `es_demo=True` monta además el ABM de códigos de acceso, igual que hace el
+    producto cuando tiene `DEMO_MODE` y `DEMO_USERNAME`. **Las dos variantes
+    hacen falta**: sin la que NO es demo, un proxy que devolviera lo mismo para
+    cualquier instancia pasaría en verde, y ahí es donde se le muestran los
+    códigos de la demo a quien abrió la ficha de un cliente.
+    """
     engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
     AuthBase.metadata.create_all(engine)
     sesiones = sessionmaker(bind=engine)
@@ -80,6 +89,9 @@ def construir_instancia_falsa(db_path):
         return {"ok": True}
 
     app.include_router(build_smtp_settings_router())
+    if es_demo:
+        app.state.demo_codigos = DemoCodigoRepository(sesiones)
+        app.include_router(build_demo_codigos_router())
 
     # El router de usuarios NO es de libraauth: cada producto tiene el suyo.
     # Este reproduce el de los cuatro FastAPI, guard de servicio incluido.
@@ -169,7 +181,7 @@ class _TransporteDeInstancias(httpx.AsyncBaseTransport):
 
 # ── El backoffice ───────────────────────────────────────────────────────────
 
-def construir_settings(tmp_path, features=("instancias", "smtp", "usuarios", "salud"), **extra):
+def construir_settings(tmp_path, features=("instancias", "smtp", "usuarios", "salud", "demos"), **extra):
     base = dict(
         product_slug="gestiolibra", product_name="Gestiolibra",
         features=frozenset(features), repo_root=tmp_path,
@@ -182,7 +194,10 @@ def construir_settings(tmp_path, features=("instancias", "smtp", "usuarios", "sa
 def instancias_falsas(tmp_path):
     """Las dos instancias que sí responden. `caida` queda sin app a propósito."""
     return {
-        "producto-acme": construir_instancia_falsa(tmp_path / "acme.db"),
+        # `acme` hace de instancia demo y `beta` de instancia de cliente: son
+        # los dos lados del par que hace falta para que el proxy de códigos
+        # pruebe algo.
+        "producto-acme": construir_instancia_falsa(tmp_path / "acme.db", es_demo=True),
         "producto-beta": construir_instancia_falsa(tmp_path / "beta.db"),
     }
 
