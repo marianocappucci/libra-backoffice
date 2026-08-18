@@ -76,6 +76,43 @@ class DemoCodigoIn(BaseModel):
     usos_max: int = 10
 
 
+#: Lo que contesta una instancia que **no** es demo. No es un 404: los seis
+#: productos sirven su SPA con un fallback, así que una ruta no montada
+#: devuelve `200` con el `index.html` —y, medido contra `dev.libradesk.com.ar`
+#: el 2026-08-18, con `Content-Type: application/json` encima—. El cliente ya
+#: detecta el cuerpo que no es JSON; acá se le da el significado que tiene en
+#: **esta** ruta.
+NO_ES_UNA_DEMO = (
+    "Esta instancia no es una demo: no monta el ABM de códigos de acceso."
+)
+
+
+async def _proxy_demo(request: Request, slug: str, metodo: str, path: str,
+                      cuerpo=None):
+    """`_proxy`, más la traducción del catch-all.
+
+    Sin esto la pantalla recibe un `200` con `{"detail": "…el cuerpo no es
+    JSON…"}` y termina mostrando un error de parseo donde la respuesta correcta
+    es "esta instancia no tiene demo".
+    """
+    try:
+        return await _proxy(request, slug, metodo, path, cuerpo)
+    except HTTPException as exc:
+        # `RespuestaDeInstancia` por cuerpo no-JSON llega acá con el status de
+        # la instancia, que en este caso es 200. Un `HTTPException(200)` no es
+        # un error para nadie: ni el navegador ni la pantalla lo tratan como
+        # tal.
+        if exc.status_code == 200 and "no es JSON" in str(exc.detail):
+            raise HTTPException(404, NO_ES_UNA_DEMO) from exc
+        # Y el 405: el fallback de la SPA sirve GET y nada mas, asi que un POST
+        # o un DELETE contra una instancia que no monta el router se estrella
+        # ahi. Medido contra dev.libradesk.com.ar. En ESTA ruta un 405 de la
+        # instancia no puede significar otra cosa.
+        if exc.status_code == 405:
+            raise HTTPException(404, NO_ES_UNA_DEMO) from exc
+        raise
+
+
 async def _proxy(request: Request, slug: str, metodo: str, path: str, cuerpo=None):
     try:
         instancia = request.app.state.inventario.obtener(slug)
@@ -151,7 +188,7 @@ async def editar_usuario(slug: str, user_id: str, datos: UsuarioUpdate, request:
 async def listar_codigos(slug: str, request: Request):
     """Los códigos emitidos. **Ninguno trae el código en sí**: el motor guarda
     el sha256 y devuelve sólo el prefijo de 4 caracteres."""
-    return await _proxy(
+    return await _proxy_demo(
         request, slug, "GET", request.app.state.settings.demo_codigos_path
     )
 
@@ -165,7 +202,7 @@ async def emitir_codigo(slug: str, datos: DemoCodigoIn, request: Request):
     guardar sólo el hash, y se paga a cambio de que un backup de la instancia
     no contenga códigos usables.
     """
-    return await _proxy(
+    return await _proxy_demo(
         request, slug, "POST", request.app.state.settings.demo_codigos_path,
         datos.model_dump(),
     )
@@ -174,4 +211,4 @@ async def emitir_codigo(slug: str, datos: DemoCodigoIn, request: Request):
 @router_demos.delete("/{codigo_id}")
 async def revocar_codigo(slug: str, codigo_id: int, request: Request):
     path = f"{request.app.state.settings.demo_codigos_path}/{codigo_id}"
-    return await _proxy(request, slug, "DELETE", path)
+    return await _proxy_demo(request, slug, "DELETE", path)

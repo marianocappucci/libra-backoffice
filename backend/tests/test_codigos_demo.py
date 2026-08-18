@@ -181,3 +181,114 @@ def test_sin_la_feature_las_rutas_no_existen(tmp_path, instancias_falsas, invent
         c.post("/api/login", json={"username": USUARIO, "password": PASSWORD})
 
         assert c.get("/api/instancias/acme/demo-codigos").status_code == 404
+
+
+# ── 🔴 El catch-all de la SPA no es un 404 ────────────────────────────────
+#
+# `test_una_instancia_que_no_es_demo_contesta_404` pasa contra la instancia
+# falsa del conftest, que es una app FastAPI **sin fallback**. Las seis reales
+# sirven su SPA con uno, así que una ruta no montada devuelve `200` con el
+# `index.html`.
+#
+# Medido contra `dev.libradesk.com.ar` el 2026-08-18, y peor de lo esperado: el
+# `200` viene con `Content-Type: application/json` y cuerpo HTML. Un cliente
+# que confíe en el content-type parsea y explota.
+#
+# Sin esto, la pantalla del backoffice recibía un `200` con
+# `{"detail": "…el cuerpo no es JSON…"}` y mostraba un error de parseo donde la
+# respuesta correcta es "esta instancia no tiene demo".
+
+def _instancia_con_catch_all():
+    """Una instancia que sirve su SPA con fallback, como las seis reales."""
+    from fastapi import FastAPI
+    from fastapi.responses import HTMLResponse
+
+    app = FastAPI()
+
+    @app.get("/{ruta:path}")
+    def spa(ruta: str):
+        # El content-type mentiroso es parte del caso medido, no un adorno: es
+        # lo que hace que "mirar el content-type" no alcance para detectarlo.
+        return HTMLResponse("<!doctype html><html lang=es><head></head></html>",
+                            headers={"content-type": "application/json"})
+
+    return app
+
+
+def test_el_catch_all_de_la_spa_se_traduce_a_404(
+    tmp_path, instancias_falsas, inventario,
+):
+    """🔴 El caso real de una instancia de cliente."""
+    from fastapi.testclient import TestClient
+
+    from libra_backoffice.app import create_app
+    from libra_backoffice.cliente_instancia import ClienteInstancia
+
+    from .conftest import (
+        PASSWORD, TOKEN, USUARIO, _TransporteDeInstancias, construir_settings,
+    )
+
+    apps = {**instancias_falsas, "producto-beta": _instancia_con_catch_all()}
+    app = create_app(construir_settings(tmp_path), inventario=inventario)
+    app.state.cliente_instancia = ClienteInstancia(
+        token=TOKEN, transport=_TransporteDeInstancias(apps))
+
+    with TestClient(app, base_url="https://testserver") as c:
+        c.post("/api/login", json={"username": USUARIO, "password": PASSWORD})
+
+        r = c.get("/api/instancias/beta/demo-codigos")
+
+        assert r.status_code == 404, r.text
+        assert "no es una demo" in r.json()["detail"]
+
+
+def test_el_catch_all_tampoco_deja_emitir(tmp_path, instancias_falsas, inventario):
+    """La otra ruta. Sin esto, el alta contra una instancia de cliente
+    devolvería 200 y la pantalla mostraría un código que no existe en ningún
+    lado."""
+    from fastapi.testclient import TestClient
+
+    from libra_backoffice.app import create_app
+    from libra_backoffice.cliente_instancia import ClienteInstancia
+
+    from .conftest import (
+        PASSWORD, TOKEN, USUARIO, _TransporteDeInstancias, construir_settings,
+    )
+
+    apps = {**instancias_falsas, "producto-beta": _instancia_con_catch_all()}
+    app = create_app(construir_settings(tmp_path), inventario=inventario)
+    app.state.cliente_instancia = ClienteInstancia(
+        token=TOKEN, transport=_TransporteDeInstancias(apps))
+
+    with TestClient(app, base_url="https://testserver") as c:
+        c.post("/api/login", json={"username": USUARIO, "password": PASSWORD})
+
+        r = c.post("/api/instancias/beta/demo-codigos", json=ALTA)
+
+        assert r.status_code == 404, r.text
+
+
+def test_la_demo_de_verdad_sigue_contestando(tmp_path, instancias_falsas, inventario):
+    """🔴 La mitad que hace útil a las dos de arriba: la traducción a 404 no
+    puede tragarse las respuestas buenas. `acme` sí es demo y contesta JSON."""
+    from fastapi.testclient import TestClient
+
+    from libra_backoffice.app import create_app
+    from libra_backoffice.cliente_instancia import ClienteInstancia
+
+    from .conftest import (
+        PASSWORD, TOKEN, USUARIO, _TransporteDeInstancias, construir_settings,
+    )
+
+    apps = {**instancias_falsas, "producto-beta": _instancia_con_catch_all()}
+    app = create_app(construir_settings(tmp_path), inventario=inventario)
+    app.state.cliente_instancia = ClienteInstancia(
+        token=TOKEN, transport=_TransporteDeInstancias(apps))
+
+    with TestClient(app, base_url="https://testserver") as c:
+        c.post("/api/login", json={"username": USUARIO, "password": PASSWORD})
+
+        r = c.get("/api/instancias/acme/demo-codigos")
+
+        assert r.status_code == 200, r.text
+        assert r.json() == {"codigos": []}
