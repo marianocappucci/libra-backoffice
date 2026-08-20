@@ -56,7 +56,23 @@ dependencies = [
     # **Este bump es el que hace util al alta**: el provisioning corre ACA
     # ADENTRO, asi que el pin de los productos (v1.33.0) no interviene. Sin
     # este bump el fix no llega a ningun lado.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.36.0",
+    # 🔴 v1.42.0: el compose de una instancia nueva nace con `LIBRA_PANEL_TOKEN`
+    # y el alta exige la identidad fiscal. Hasta v1.41.0 el generador no
+    # escribia esa variable: las dos instancias de Contalibra la tienen porque
+    # se les puso A MANO el 2026-08-20, y toda instancia creada desde aca
+    # despues de esa fecha nacia sin ella. El guard de libraauth es opt-in por
+    # ausencia, asi que `/api/resumen` devuelve 401 sin mirar el header y el
+    # panel del dueno muestra la sucursal como "sin respuesta" —
+    # indistinguible de una caida.
+    #
+    # **Este bump es el que hace que el arreglo exista**: el provisioning corre
+    # ACA ADENTRO, con este `pip install`, asi que el pin de los productos no
+    # interviene. Sin el, el generador sigue siendo el de v1.36.0.
+    #
+    # ⚠️ Cambia el comportamiento del alta: `crear_cliente` rechaza un alta sin
+    # CUIT. La validacion es previa a tocar Docker, asi que un rechazo no deja
+    # el slug tomado. `InstanciaIn` ya manda `empresa_cuit`/`sin_identidad`.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.42.0",
     "fastapi>=0.111,<1",
     "uvicorn[standard]>=0.30,<1",
     # El control plane le habla a cada instancia por HTTP.

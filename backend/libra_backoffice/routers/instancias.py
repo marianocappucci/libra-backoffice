@@ -46,6 +46,20 @@ class InstanciaIn(BaseModel):
     admin_user: str = "admin"
     admin_password: str = ""
     plan: str = "basico"
+    # Identidad fiscal. `empresa_nombre` es la razón social —que puede no ser el
+    # nombre comercial de `nombre`— y el motor la cae a `nombre` si viene vacía.
+    #
+    # El CUIT es **obligatorio del lado del motor**, y no se repite la
+    # validación acá: duplicarla haría que las dos versiones se separaran y que
+    # esta pantalla aceptara altas que el motor después rechaza (o al revés).
+    # Un CUIT faltante o mal formado vuelve como 422 con el motivo, que es el
+    # camino que el formulario ya sabe mostrar.
+    empresa_cuit: str = ""
+    empresa_nombre: str = ""
+    # Opt-in explícito para las instancias de demo, que no tienen CUIT. Sin él
+    # el alta sin CUIT se rechaza: una instancia sin identidad no se puede
+    # agrupar por razón social en el panel del dueño.
+    sin_identidad: bool = False
     setup_npm: bool = True
 
 
@@ -103,6 +117,17 @@ class InstanciaCreada(InstanciaEditada):
     """
 
     admin_password: str = ""
+    # 🔴 La credencial con la que el panel del dueño le pide los números a esta
+    # sucursal (`X-Panel-Auth` contra `LIBRA_PANEL_TOKEN`). Igual que la
+    # contraseña: el motor la genera —aleatoria y distinta por instancia— y esta
+    # respuesta es la única vez que sale del host por HTTP.
+    #
+    # No está en `InstanciaEditada`, y esa herencia es la que lo garantiza:
+    # cualquier otro endpoint que devuelva una instancia usa aquel modelo y no
+    # puede arrastrarla sin que alguien lo escriba a mano. Si el navegador nunca
+    # vio esta respuesta, el valor sigue estando en el `docker-compose.yml` de
+    # la instancia, en el host.
+    panel_token: str = ""
     # `None` = no se intentó (sin dominio, o NPM no configurado). `False` = se
     # intentó y falló: el cliente existe pero su dominio no resuelve todavía.
     proxy_ok: bool | None = None

@@ -40,12 +40,14 @@ const SMTP = {
   password_definida: false, password_indescifrable: false, configurado: false,
 }
 
-/** Lo que devuelve el alta. `admin_password` es lo que la hace distinta de una
- *  `Instancia`: el motor la generó y esta respuesta es la única vez que sale. */
+/** Lo que devuelve el alta. `admin_password` y `panel_token` son lo que la hace
+ *  distinta de una `Instancia`: los generó el motor y esta respuesta es la única
+ *  vez que salen del host. */
 const CREADA = {
   slug: 'nueva', nombre: 'Nueva SA', domain: '', port: 8090,
   container: 'producto-nueva', admin_user: 'admin',
   admin_password: 'la-generada-por-el-motor', plan: 'basico', proxy_ok: null,
+  panel_token: 'el-token-de-panel-de-esta-instancia',
 }
 
 /** Sin sesión: `/api/me` responde 401, como con la cookie vencida. */
@@ -323,12 +325,20 @@ async function abrirAlta() {
   return u
 }
 
+/** Lo mínimo que el motor acepta: nombre y CUIT. Desde que el alta exige la
+ *  identidad fiscal, tipear sólo el nombre deja el botón deshabilitado — que es
+ *  justo lo que prueba `no deja crear una instancia sin CUIT`. */
+async function completarLoMinimo(u: ReturnType<typeof usuario>, nombre = 'Nueva SA') {
+  await u.type(screen.getByLabelText(/nombre del cliente/i), nombre)
+  await u.type(screen.getByLabelText(/^cuit$/i), '20-28993360-4')
+}
+
 describe('alta de una instancia', () => {
   it('manda el alta con lo poco que se completó, sin inventar el resto', async () => {
     conSesion()
     const u = await abrirAlta()
 
-    await u.type(screen.getByLabelText(/nombre del cliente/i), 'Nueva SA')
+    await completarLoMinimo(u)
     await u.click(screen.getByRole('button', { name: /crear instancia/i }))
 
     await waitFor(() => {
@@ -343,14 +353,68 @@ describe('alta de una instancia', () => {
       expect(cuerpo).not.toHaveProperty('slug')
       expect(cuerpo).not.toHaveProperty('port')
       expect(cuerpo).not.toHaveProperty('admin_password')
+      // El CUIT SÍ va: es lo único que el host no puede derivar solo.
+      expect(cuerpo.empresa_cuit).toBe('20-28993360-4')
+      // `sin_identidad` sin tildar tampoco se manda: el default del motor es
+      // exigir el CUIT, y mandarlo en `false` sería repetirle su propio default.
+      expect(cuerpo).not.toHaveProperty('sin_identidad')
+      expect(cuerpo).not.toHaveProperty('empresa_nombre')
     })
+  })
+
+  it('no deja crear una instancia sin CUIT', async () => {
+    // 🔴 La instancia que motiva esto existe: `contalibra-demo` contesta
+    // nombre y CUIT vacíos, y el panel del dueño no la puede agrupar por razón
+    // social. "Después lo cargo desde Configuración" fue exactamente lo que no
+    // pasó.
+    conSesion()
+    const u = await abrirAlta()
+
+    await u.type(screen.getByLabelText(/nombre del cliente/i), 'Nueva SA')
+    expect(screen.getByRole('button', { name: /crear instancia/i })).toBeDisabled()
+
+    await u.type(screen.getByLabelText(/^cuit$/i), '20-28993360-4')
+    expect(screen.getByRole('button', { name: /crear instancia/i })).toBeEnabled()
+  })
+
+  it('una demo se puede dar de alta sin CUIT, pero pidiéndolo', async () => {
+    // El opt-in es explícito porque la alternativa —inventar un CUIT para pasar
+    // el chequeo— es peor: uno falso agrupa, y agrupa mal.
+    conSesion()
+    const u = await abrirAlta()
+
+    await u.type(screen.getByLabelText(/nombre del cliente/i), 'Demo')
+    await u.click(screen.getByLabelText(/es una demo, sin identidad fiscal/i))
+    await u.click(screen.getByRole('button', { name: /crear instancia/i }))
+
+    await waitFor(() => {
+      const alta = fetchMock.mock.calls.find(
+        (c) => String(c[0]).endsWith('/api/instancias') && (c[1] as Init)?.method === 'POST',
+      )
+      expect(alta).toBeDefined()
+      expect(cuerpoDe(alta!).sin_identidad).toBe(true)
+    })
+  })
+
+  it('muestra la credencial del panel, que tampoco vuelve por ningún otro lado', async () => {
+    // Sin esta pantalla, cargar la sucursal en LibraPanel obliga a leer el
+    // `docker-compose.yml` de la instancia por SSH.
+    conSesion()
+    const u = await abrirAlta()
+
+    await completarLoMinimo(u)
+    await u.click(screen.getByRole('button', { name: /crear instancia/i }))
+
+    expect(
+      await screen.findByText('el-token-de-panel-de-esta-instancia'),
+    ).toBeInTheDocument()
   })
 
   it('muestra la contraseña generada, que no vuelve por ningún otro lado', async () => {
     conSesion()
     const u = await abrirAlta()
 
-    await u.type(screen.getByLabelText(/nombre del cliente/i), 'Nueva SA')
+    await completarLoMinimo(u)
     await u.click(screen.getByRole('button', { name: /crear instancia/i }))
 
     expect(await screen.findByText('la-generada-por-el-motor')).toBeInTheDocument()
@@ -373,7 +437,7 @@ describe('alta de una instancia', () => {
     })
     const u = await abrirAlta()
 
-    await u.type(screen.getByLabelText(/nombre del cliente/i), 'Nueva SA')
+    await completarLoMinimo(u)
     await u.click(screen.getByRole('button', { name: /crear instancia/i }))
 
     expect(await screen.findByText(/no reintentes todavía/i)).toBeInTheDocument()
@@ -386,7 +450,7 @@ describe('alta de una instancia', () => {
     })
     const u = await abrirAlta()
 
-    await u.type(screen.getByLabelText(/nombre del cliente/i), 'ACME')
+    await completarLoMinimo(u, 'ACME')
     await u.click(screen.getByRole('button', { name: /crear instancia/i }))
 
     expect(await screen.findByText(/ya existe un cliente/i)).toBeInTheDocument()
