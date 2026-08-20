@@ -10,6 +10,13 @@
 //    toma el próximo puerto libre y genera la contraseña. Pedir esos tres
 //    campos sería pedirle al humano que adivine lo que el host ya sabe, y cada
 //    uno es una forma de equivocarse (un puerto ocupado, un slug con acentos).
+//
+//    **El CUIT es la excepción, y lo es porque el host no lo sabe.** Sin él la
+//    instancia nace sin identidad fiscal y el panel del dueño no la puede
+//    agrupar por razón social — le pasó a `contalibra-demo`, que hoy contesta
+//    nombre y CUIT vacíos. "Después lo cargo desde Configuración" es
+//    exactamente lo que no pasó. Para las demos, que no tienen CUIT, está el
+//    check de abajo: explícito, para que no sea el camino de menor esfuerzo.
 // 2. **La contraseña generada se ve una sola vez.** Vuelve en la respuesta del
 //    alta y en ningún otro endpoint. Si esta pantalla la refrescara y siguiera
 //    de largo, quedaría un admin al que sólo se entra leyendo
@@ -41,6 +48,7 @@ type Props = {
 
 const VACIO = {
   nombre: '', slug: '', domain: '', port: '',
+  empresa_nombre: '', empresa_cuit: '', sin_identidad: false,
   admin_user: 'admin', admin_password: '', plan: '', setup_npm: true,
 }
 
@@ -81,6 +89,12 @@ export function AltaInstancia({ planes, slugsPrevios, recargar }: Props) {
     if (campos.admin_user.trim()) datos.admin_user = campos.admin_user.trim()
     if (campos.admin_password) datos.admin_password = campos.admin_password
     if (campos.plan) datos.plan = campos.plan
+    if (campos.empresa_nombre.trim()) datos.empresa_nombre = campos.empresa_nombre.trim()
+    if (campos.empresa_cuit.trim()) datos.empresa_cuit = campos.empresa_cuit.trim()
+    // Se manda sólo cuando está tildado. La validación del CUIT vive en el
+    // motor y no se duplica acá: dos copias de una regla se separan, y la que
+    // se separa es siempre la de la pantalla.
+    if (campos.sin_identidad) datos.sin_identidad = true
     datos.setup_npm = campos.setup_npm
 
     try {
@@ -136,6 +150,41 @@ export function AltaInstancia({ planes, slugsPrevios, recargar }: Props) {
                 placeholder="ACME SA"
               />
             </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="alta-razon">Razón social</Label>
+                <Input
+                  id="alta-razon"
+                  value={campos.empresa_nombre}
+                  onChange={(e) => set('empresa_nombre', e.target.value)}
+                  placeholder="igual al nombre"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="alta-cuit">CUIT</Label>
+                <Input
+                  id="alta-cuit"
+                  required={!campos.sin_identidad}
+                  disabled={campos.sin_identidad}
+                  value={campos.empresa_cuit}
+                  onChange={(e) => set('empresa_cuit', e.target.value)}
+                  placeholder="20-28993360-4"
+                />
+              </div>
+            </div>
+
+            <label className="flex items-start gap-2 text-sm text-muted-foreground">
+              <Checkbox
+                className="mt-0.5"
+                checked={campos.sin_identidad}
+                onCheckedChange={(v) => set('sin_identidad', v === true)}
+              />
+              <span>
+                Es una demo, sin identidad fiscal. El panel del dueño no la va a poder agrupar
+                por razón social y la va a mostrar como «sin identificar».
+              </span>
+            </label>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
@@ -231,7 +280,14 @@ export function AltaInstancia({ planes, slugsPrevios, recargar }: Props) {
               <Button type="button" variant="outline" onClick={() => abrir(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={creando || !campos.nombre.trim()}>
+              <Button
+                type="submit"
+                disabled={
+                  creando ||
+                  !campos.nombre.trim() ||
+                  (!campos.sin_identidad && !campos.empresa_cuit.trim())
+                }
+              >
                 {creando ? 'Creando…' : 'Crear instancia'}
               </Button>
             </DialogFooter>
@@ -260,7 +316,8 @@ function Credenciales({
 
   async function copiar() {
     await navigator.clipboard?.writeText(
-      `${instancia.admin_user} / ${instancia.admin_password}`,
+      `${instancia.admin_user} / ${instancia.admin_password}` +
+        (instancia.panel_token ? `\npanel token: ${instancia.panel_token}` : ''),
     )
     setCopiado(true)
   }
@@ -270,7 +327,9 @@ function Credenciales({
       <DialogHeader>
         <DialogTitle>Instancia «{instancia.slug}» creada</DialogTitle>
         <DialogDescription>
-          Anotá la contraseña antes de cerrar: no hay ninguna pantalla que vuelva a mostrarla.
+          Anotá la contraseña y el panel token antes de cerrar: no hay ninguna pantalla que
+          vuelva a mostrarlos. El panel token es el que va en el alta de esta sucursal en
+          LibraPanel.
         </DialogDescription>
       </DialogHeader>
 
@@ -281,6 +340,12 @@ function Credenciales({
         <dd className="font-mono break-all">{instancia.admin_password}</dd>
         <dt className="text-muted-foreground">Plan</dt>
         <dd>{instancia.plan}</dd>
+        {instancia.panel_token && (
+          <>
+            <dt className="text-muted-foreground">Panel token</dt>
+            <dd className="font-mono break-all">{instancia.panel_token}</dd>
+          </>
+        )}
         <dt className="text-muted-foreground">Puerto</dt>
         <dd className="font-mono">{instancia.port}</dd>
         {instancia.domain && (

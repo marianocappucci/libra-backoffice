@@ -45,6 +45,12 @@ export type AltaIn = {
   admin_user?: string
   admin_password?: string
   plan?: string
+  /** Razón social. Puede no ser el nombre comercial; el motor la cae a `nombre`. */
+  empresa_nombre?: string
+  /** Obligatorio salvo `sin_identidad`: el motor rechaza el alta sin él. */
+  empresa_cuit?: string
+  /** Opt-in para las demos, que no tienen CUIT. */
+  sin_identidad?: boolean
   setup_npm?: boolean
 }
 
@@ -61,6 +67,11 @@ export type InstanciaCreada = {
   admin_user: string
   admin_password: string
   plan: string
+  // La credencial que el panel del dueño usa para pedirle los números a esta
+  // sucursal. Igual que la contraseña: sale del host una sola vez, en esta
+  // respuesta. Si nadie la anota, queda en el `docker-compose.yml` de la
+  // instancia y en ningún endpoint.
+  panel_token: string
   // `null` = no se intentó (sin dominio, o NPM sin configurar). `false` = se
   // intentó y falló: la instancia existe pero su dominio todavía no resuelve.
   proxy_ok: boolean | null
