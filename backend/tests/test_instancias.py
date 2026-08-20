@@ -57,6 +57,12 @@ def servicios_falsos(inventario):
             "admin_password": kwargs.get("admin_password") or "generada-por-el-motor",
             "plan": kwargs.get("plan", "basico"), "proxy_ok": None,
             "dir": "/root/producto/clientes/nueva",
+            # El motor genera una credencial de panel distinta por instancia y
+            # la devuelve acá; igual que la contraseña, es la única vez que
+            # sale del host por HTTP.
+            "panel_token": "el-token-de-panel-de-esta-instancia",
+            "empresa_nombre": kwargs.get("empresa_nombre") or kwargs["nombre"],
+            "empresa_cuit": kwargs.get("empresa_cuit", ""),
         }
 
     def editar_cliente(slug, nombre, domain):
@@ -150,6 +156,49 @@ def test_la_respuesta_del_alta_no_expone_la_ruta_del_host(admin):
     """`crear_cliente` devuelve también el directorio en el VPS. El navegador
     no tiene nada que hacer con eso; el `response_model` lo deja afuera."""
     assert "dir" not in admin.post("/api/instancias", json={"nombre": "Nueva SA"}).json()
+
+
+def test_el_alta_devuelve_la_credencial_del_panel(admin):
+    """El panel del dueño le pide los números a cada sucursal con esta
+    credencial. El motor la genera aleatoria y distinta por instancia; si esta
+    respuesta no la trajera, cargarla en LibraPanel obligaría a leer el
+    `docker-compose.yml` por SSH."""
+    cuerpo = admin.post("/api/instancias", json={"nombre": "Nueva SA"}).json()
+    assert cuerpo["panel_token"] == "el-token-de-panel-de-esta-instancia"
+
+
+def test_la_identidad_fiscal_llega_al_motor(admin, servicios_falsos):
+    """El router no valida el CUIT —esa regla vive en el motor y duplicarla la
+    haría separarse—, pero sí tiene que pasárselo. Un campo que el schema no
+    declara lo descarta pydantic **en silencio**, y el alta seguiría creando
+    instancias sin identidad como si nada."""
+    admin.post("/api/instancias", json={
+        "nombre": "Compulibra", "empresa_cuit": "20-28993360-4",
+        "empresa_nombre": "CAPPUCCI MARIANO",
+    })
+    _, kwargs = [ll for ll in servicios_falsos.llamadas if ll[0] == "crear"][-1]
+    assert kwargs["empresa_cuit"] == "20-28993360-4"
+    assert kwargs["empresa_nombre"] == "CAPPUCCI MARIANO"
+    assert kwargs["sin_identidad"] is False
+
+
+def test_el_opt_in_de_demo_llega_al_motor(admin, servicios_falsos):
+    """Contraprueba de la anterior: sin esto, `sin_identidad` se perdería en el
+    schema y el motor rechazaría toda alta de demo."""
+    admin.post("/api/instancias", json={"nombre": "Demo", "sin_identidad": True})
+    _, kwargs = [ll for ll in servicios_falsos.llamadas if ll[0] == "crear"][-1]
+    assert kwargs["sin_identidad"] is True
+
+
+def test_la_edicion_no_devuelve_la_credencial_del_panel(admin):
+    """Mismo motivo que la contraseña: `InstanciaCreada` la declara y
+    `InstanciaEditada` no, y la herencia es en ese sentido. Si alguien
+    invirtiera los modelos, cada guardado de nombre y dominio filtraría la
+    credencial con la que se leen los números de esa sucursal."""
+    cuerpo = admin.put(
+        "/api/instancias/acme", json={"nombre": "ACME SRL", "domain": "acme.test"}
+    ).json()
+    assert "panel_token" not in cuerpo
 
 
 def test_alta_duplicada_es_422(admin):
