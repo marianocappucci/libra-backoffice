@@ -387,3 +387,40 @@ def test_la_libracore_instalada_entiende_el_mensaje_del_corte():
         "de servicio del backoffice le borraría el texto al cliente. Hace falta "
         "subir el pin de libracore en backend/pyproject.toml."
     )
+
+
+def test_la_libracore_instalada_le_da_identidad_y_credencial_de_panel_a_la_instancia():
+    """El mismo acoplamiento que el test de arriba, sobre el alta.
+
+    🔴 **Es el único test de este repo que puede probar el pin.** Todo lo demás
+    corre contra `servicios_falsos`, que devuelve `panel_token` porque lo
+    escribimos nosotros — con el pin en v1.36.0 la suite entera queda verde y
+    las instancias nuevas siguen naciendo sin la variable, que es exactamente
+    el defecto que se está arreglando.
+
+    Y el defecto tiene fecha: hasta el 2026-08-20 ningún compose tenía
+    `LIBRA_PANEL_TOKEN`; las dos instancias de Contalibra se parchearon a mano.
+    """
+    import inspect
+
+    from libracore.admin import services
+    from libracore.provisioning import nuevo_cliente
+
+    firma = inspect.signature(services.crear_cliente)
+    for parametro in ("empresa_cuit", "empresa_nombre", "sin_identidad"):
+        assert parametro in firma.parameters, (
+            f"La libracore instalada no acepta `{parametro}` en crear_cliente: "
+            "el alta seguiría creando instancias sin identidad fiscal, que el "
+            "panel del dueño no puede agrupar por razón social. Hace falta "
+            "subir el pin de libracore en backend/pyproject.toml (>= v1.42.0)."
+        )
+
+    # El fuente del generador y no un alta real: correr `crear_cliente` de
+    # verdad necesitaría Docker. Lo que se fija es que la plantilla escriba la
+    # variable, que es el único lugar donde el arreglo vive.
+    plantilla = inspect.getsource(nuevo_cliente.crear_cliente)
+    assert "LIBRA_PANEL_TOKEN" in plantilla, (
+        "La libracore instalada genera composes sin `LIBRA_PANEL_TOKEN`: el "
+        "panel del dueño va a recibir 401 de toda instancia nueva y mostrarla "
+        "como «sin respuesta». Hace falta el pin >= v1.42.0."
+    )
