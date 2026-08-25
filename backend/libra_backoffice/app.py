@@ -23,7 +23,7 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from libraauth.admin_auth import AdminAuth
 from libracore.security_headers import SecurityHeadersMiddleware
@@ -61,7 +61,37 @@ def create_app(
 
     @app.get("/health", include_in_schema=False)
     def health():
-        """Sin auth: la usan el healthcheck de Docker y el proxy."""
+        """Sin auth: la usan el healthcheck de Docker y el proxy.
+
+        🔴 **Toca el camino de los scripts a proposito.** Devolver `{"ok": true}`
+        con mirar solo el proceso es lo que hizo que tres caidas del panel
+        —`backup_zip` el 2026-08-12, `migraciones` el 2026-08-24— pasaran con
+        el contenedor en `healthy`: el import de `panel_admin.py` es diferido,
+        asi que el proceso levanta perfecto y revienta recien en el primer
+        request. Ver `verificar_scripts()` en `inventario.py`.
+
+        El 503 es deliberado y no un 200 con un campo de estado: lo que lee
+        Docker es el codigo, y un panel que no puede importar los scripts de su
+        producto no puede listar, dar de alta ni administrar usuarios. No queda
+        nada que servir.
+        """
+        try:
+            app.state.inventario.verificar_scripts()
+        except Exception as exc:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "ok": False,
+                    "producto": settings.product_slug,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "detalle": (
+                        "No se pudieron importar los scripts del producto desde "
+                        f"{settings.repo_root}. Suele ser el pin de libracore de "
+                        "este contenedor contra un `configure()` mas nuevo en el "
+                        "repo del producto — ver backend/pyproject.toml."
+                    ),
+                },
+            )
         return {"ok": True, "producto": settings.product_slug}
 
     app.include_router(auth.router)
