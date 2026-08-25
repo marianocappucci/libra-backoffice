@@ -56,6 +56,30 @@ class Inventario:
         services.configure(repo_root=repo_root, db_filename=db_filename)
         self.servicios = services
 
+    def verificar_scripts(self) -> None:
+        """Importa los dos scripts del producto. Levanta si alguno no carga.
+
+        🔴 **Esto es lo que le faltaba al `/health`.** El inventario y el alta
+        no viven acá: son `scripts/panel_admin.py` y `scripts/nuevo_cliente.py`
+        del repo del producto, montados desde el host e importados por
+        `libracore.admin.services` con la libracore de ESTE contenedor. Los dos
+        llaman a `provisioning.configure(...)` al importarse, así que un
+        argumento que nuestro pin no entiende revienta ahí — y como el import
+        es diferido hasta el primer request, el contenedor arranca `healthy` y
+        el panel devuelve 500 a todo.
+
+        Pasó tres veces: `backup_zip` el 2026-08-12, `migraciones` el
+        2026-08-24 (cinco de ocho paneles a la vez), y antes el salto de
+        v1.3.0. Las tres nos enteramos porque alguien abrió el panel y no vio
+        nada. Con el chequeo acá, el contenedor se pone rojo solo.
+
+        Los dos y no sólo `panel_admin`: `nuevo_cliente` es el del alta, y el
+        `configure()` que rompe está en los dos archivos. Uno solo dejaría el
+        alta rota con el semáforo en verde.
+        """
+        self.servicios._pa()
+        self.servicios._nc()
+
     def listar(self) -> list[Instancia]:
         return [self._a_instancia(c) for c in self.servicios.listar_clientes()]
 
