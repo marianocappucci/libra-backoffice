@@ -141,6 +141,14 @@ class InventarioFalso:
                                estado="exited"),
         }
 
+    def verificar_scripts(self):
+        """El producto de mentira importa siempre.
+
+        Que este doble diga que si no prueba nada del mecanismo real — eso
+        lo cubre test_salud_scripts.py contra scripts de verdad. Aca esta
+        para que el /health nuevo no de 503 en toda la suite.
+        """
+
     def listar(self):
         return list(self._instancias.values())
 
