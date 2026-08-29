@@ -389,6 +389,45 @@ def test_la_libracore_instalada_entiende_el_mensaje_del_corte():
     )
 
 
+def test_la_libracore_instalada_le_crea_la_casilla_de_correo_a_la_instancia():
+    """El pin tiene que traer el alta de casillas, o la instancia nace sin correo.
+
+    🔴 **Igual que los dos de abajo: nada más en esta suite puede detectarlo.**
+    Todo corre contra `servicios_falsos`, así que con el pin en v1.51.0 —que no
+    tiene el módulo— la suite queda entera en verde y las instancias siguen
+    naciendo con `smtp_settings` vacía, que es exactamente el defecto que este
+    pin viene a arreglar.
+
+    El opt-in es por ausencia: sin `LIBRA_MAIL_ADMIN_SSH` en el entorno no se
+    crea ninguna casilla. Lo que se fija acá es que **el mecanismo exista**, no
+    que esté prendido — prenderlo es configuración del servidor, no del código.
+    """
+    import inspect
+
+    try:
+        from libracore.provisioning import mail_cuentas
+    except ImportError:  # pragma: no cover - es el fallo que el test reporta
+        raise AssertionError(
+            "La libracore instalada no tiene `provisioning.mail_cuentas`: el "
+            "alta no le crearía la casilla de correo a la instancia y "
+            "/auth/forgot-password seguiría devolviendo 503. Hace falta subir "
+            "el pin de libracore en backend/pyproject.toml (>= v1.61.0)."
+        ) from None
+
+    for nombre in ("configurado", "crear_cuenta", "borrar_cuenta"):
+        assert hasattr(mail_cuentas, nombre), (
+            f"`mail_cuentas` no expone `{nombre}`: el pin de libracore trae el "
+            "módulo pero no la interfaz que usa el alta."
+        )
+
+    from libracore.provisioning import nuevo_cliente
+
+    assert "mail_cuentas" in inspect.getsource(nuevo_cliente), (
+        "El módulo existe pero el alta no lo llama: un pin intermedio traería "
+        "el archivo sin el cableado, y la instancia nacería igual sin correo."
+    )
+
+
 def test_la_libracore_instalada_le_da_identidad_y_credencial_de_panel_a_la_instancia():
     """El mismo acoplamiento que el test de arriba, sobre el alta.
 
