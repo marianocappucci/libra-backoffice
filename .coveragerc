@@ -4,7 +4,7 @@
 [report]
 show_missing = True
 # Piso de cobertura. Es un TRINQUETE, no una meta: se fija 2 puntos por
-# debajo de lo que el repo mide HOY (97%%, medido en el CI del
+# debajo de lo que el repo mide HOY (97%, medido en el CI del
 # 2026-09-03), asi que pasa holgado y lo unico que puede ponerlo en rojo es
 # una regresion. Cuando la cobertura suba de verdad, subir tambien este
 # numero -- nunca bajarlo para que pase un cambio.
