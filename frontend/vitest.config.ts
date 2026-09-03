@@ -26,7 +26,7 @@ export default mergeConfig(
         // compartida (Login, tabla, ConfiguracionSmtp, Usuarios) se prueba a
         // fondo en libra-ui, que tiene su propia suite y su propio CI.
         // Medido el 2026-08-02: 81% de lineas; el piso queda 3 puntos abajo.
-        thresholds: { lines: 78 },
+        thresholds: { lines: 89 },
         reporter: ['text-summary', 'json-summary'],
         // Solo el codigo propio del producto: `libra-ui` tiene su propia
         // suite y su propio CI, medirlo aca contaria dos veces lo mismo.
