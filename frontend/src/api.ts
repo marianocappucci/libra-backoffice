@@ -121,6 +121,11 @@ export const backoffice = {
     api.put<Instancia>(`/api/instancias/${slug}`, datos),
   cambiarPlan: (slug: string, plan: string) =>
     api.put<Instancia>(`/api/instancias/${slug}/plan`, { plan }),
+  // Add-ons (módulos sueltos, fuera de los planes). `{}` si el producto no tiene.
+  addons: (slug: string) =>
+    api.get<Record<string, boolean>>(`/api/instancias/${slug}/addons`),
+  cambiarAddon: (slug: string, addon: string, habilitado: boolean) =>
+    api.put<Record<string, boolean>>(`/api/instancias/${slug}/addons/${addon}`, { habilitado }),
   // `mensaje` sólo pesa en `pausar` y `suspender`; en `activar` el motor lo
   // limpia, así que mandarlo o no da lo mismo.
   accion: (slug: string, accion: string, mensaje = '') =>
