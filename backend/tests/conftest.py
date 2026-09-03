@@ -15,9 +15,9 @@ import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from libraauth.models import Base as AuthBase
-from libraauth.repository import UserRepository, UsernameTaken
 from libraauth.demo_codigos import DemoCodigoRepository
+from libraauth.models import Base as AuthBase
+from libraauth.repository import UsernameTaken, UserRepository
 from libraauth.session_auth import (
     SERVICE_TOKEN_ENV,
     build_demo_codigos_router,

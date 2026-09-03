@@ -19,6 +19,7 @@ import { Usuarios } from 'libra-ui/Usuarios'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -58,6 +59,9 @@ export function Instancia() {
   const [error, setError] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
   const [ocupado, setOcupado] = useState(false)
+  // Add-ons de la instancia. `{}` si el producto no tiene ninguno: la sección
+  // no se muestra. Ver libracore.admin.services.addons_de_instancia.
+  const [addons, setAddons] = useState<Record<string, boolean>>({})
 
   const releer = useCallback(async () => {
     setInstancia(await backoffice.instancia(slug))
@@ -65,10 +69,11 @@ export function Instancia() {
 
   useEffect(() => {
     setCargando(true)
-    Promise.all([backoffice.instancia(slug), backoffice.planes()])
-      .then(([i, p]) => {
+    Promise.all([backoffice.instancia(slug), backoffice.planes(), backoffice.addons(slug)])
+      .then(([i, p, a]) => {
         setInstancia(i)
         setPlanes(p)
+        setAddons(a)
       })
       .catch((err) => setError(describirError(err)))
       .finally(() => setCargando(false))
@@ -81,6 +86,20 @@ export function Instancia() {
     try {
       setInstancia(await fn())
       setAviso(mensaje)
+    } catch (err) {
+      setError(describirError(err))
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  async function cambiarAddon(addon: string, habilitado: boolean) {
+    setOcupado(true)
+    setError(null)
+    setAviso(null)
+    try {
+      setAddons(await backoffice.cambiarAddon(slug, addon, habilitado))
+      setAviso(`Add-on «${addon}» ${habilitado ? 'habilitado' : 'deshabilitado'}.`)
     } catch (err) {
       setError(describirError(err))
     } finally {
@@ -186,6 +205,24 @@ export function Instancia() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+        )}
+
+        {Object.keys(addons).length > 0 && (
+          <div className="space-y-2">
+            <span className="text-sm text-muted-foreground">Add-ons</span>
+            <div className="flex flex-wrap gap-4">
+              {Object.entries(addons).map(([addon, on]) => (
+                <label key={addon} className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={on}
+                    disabled={ocupado}
+                    onCheckedChange={(v) => cambiarAddon(addon, v === true)}
+                  />
+                  {addon}
+                </label>
+              ))}
+            </div>
           </div>
         )}
       </CardContent>

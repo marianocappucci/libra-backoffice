@@ -13,13 +13,17 @@ contestara lo mismo para cualquier instancia pasaría en verde — y ahí es don
 se le muestran los códigos de la demo a quien abrió la ficha de un cliente.
 """
 import pytest
-
-from libra_backoffice.cliente_instancia import ClienteInstancia
-from libra_backoffice.app import create_app
 from fastapi.testclient import TestClient
 
+from libra_backoffice.app import create_app
+from libra_backoffice.cliente_instancia import ClienteInstancia
+
 from .conftest import (
-    TOKEN, USUARIO, PASSWORD, _TransporteDeInstancias, construir_settings,
+    PASSWORD,
+    TOKEN,
+    USUARIO,
+    _TransporteDeInstancias,
+    construir_settings,
 )
 
 ALTA = {"etiqueta": "Estudio Pérez", "dias": 3, "usos_max": 5}
@@ -225,7 +229,11 @@ def test_el_catch_all_de_la_spa_se_traduce_a_404(
     from libra_backoffice.cliente_instancia import ClienteInstancia
 
     from .conftest import (
-        PASSWORD, TOKEN, USUARIO, _TransporteDeInstancias, construir_settings,
+        PASSWORD,
+        TOKEN,
+        USUARIO,
+        _TransporteDeInstancias,
+        construir_settings,
     )
 
     apps = {**instancias_falsas, "producto-beta": _instancia_con_catch_all()}
@@ -252,7 +260,11 @@ def test_el_catch_all_tampoco_deja_emitir(tmp_path, instancias_falsas, inventari
     from libra_backoffice.cliente_instancia import ClienteInstancia
 
     from .conftest import (
-        PASSWORD, TOKEN, USUARIO, _TransporteDeInstancias, construir_settings,
+        PASSWORD,
+        TOKEN,
+        USUARIO,
+        _TransporteDeInstancias,
+        construir_settings,
     )
 
     apps = {**instancias_falsas, "producto-beta": _instancia_con_catch_all()}
@@ -277,7 +289,11 @@ def test_la_demo_de_verdad_sigue_contestando(tmp_path, instancias_falsas, invent
     from libra_backoffice.cliente_instancia import ClienteInstancia
 
     from .conftest import (
-        PASSWORD, TOKEN, USUARIO, _TransporteDeInstancias, construir_settings,
+        PASSWORD,
+        TOKEN,
+        USUARIO,
+        _TransporteDeInstancias,
+        construir_settings,
     )
 
     apps = {**instancias_falsas, "producto-beta": _instancia_con_catch_all()}

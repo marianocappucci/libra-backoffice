@@ -1,0 +1,11 @@
+# Config de cobertura de este repo. Va en un archivo propio porque el
+# repo no tiene pyproject.toml; el resto de la familia la lleva en
+# [tool.coverage.report] de ahi.
+[report]
+show_missing = True
+# Piso de cobertura. Es un TRINQUETE, no una meta: se fija 2 puntos por
+# debajo de lo que el repo mide HOY (97%, medido en el CI del
+# 2026-09-03), asi que pasa holgado y lo unico que puede ponerlo en rojo es
+# una regresion. Cuando la cobertura suba de verdad, subir tambien este
+# numero -- nunca bajarlo para que pase un cambio.
+fail_under = 95

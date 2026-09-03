@@ -72,6 +72,10 @@ class PlanIn(BaseModel):
     plan: str
 
 
+class AddonIn(BaseModel):
+    habilitado: bool
+
+
 class EstadoIn(BaseModel):
     accion: str
     # Sólo lo usan `pausar` y `suspender`: es el texto que ve el cliente en el
@@ -182,6 +186,29 @@ def cambiar_plan(slug: str, datos: PlanIn, request: Request):
     except servicios.ServiceError as exc:
         raise HTTPException(422, str(exc))
     return _obtener(request, slug).dict()
+
+
+# Add-ons (módulos sueltos, fuera de los planes). A diferencia del plan, el
+# estado vive en la base viva de la instancia, así que el servicio llega por
+# `docker exec` (ver libracore.admin.services.set_addon). El producto sin
+# add-ons devuelve `{}` y el frontend no muestra la sección.
+@router.get("/instancias/{slug}/addons")
+def listar_addons(slug: str, request: Request):
+    servicios = _servicios(request)
+    try:
+        return servicios.addons_de_instancia(slug)
+    except servicios.ServiceError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@router.put("/instancias/{slug}/addons/{addon}")
+def cambiar_addon(slug: str, addon: str, datos: AddonIn, request: Request):
+    servicios = _servicios(request)
+    try:
+        servicios.set_addon(slug, addon, datos.habilitado)
+    except servicios.ServiceError as exc:
+        raise HTTPException(422, str(exc))
+    return servicios.addons_de_instancia(slug)
 
 
 @router.post("/instancias/{slug}/estado")

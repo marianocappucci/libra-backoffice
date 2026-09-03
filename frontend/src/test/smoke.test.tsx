@@ -73,6 +73,9 @@ function conSesion(rutas: Record<string, (init: Init) => Promise<Response>> = {}
     }
     if (u.includes('/smtp')) return Promise.resolve(json(SMTP))
     if (u.includes('/usuarios')) return Promise.resolve(json([]))
+    // Sin add-ons: el producto de humo no tiene ninguno, así que la sección no
+    // se muestra. Va ANTES del match general de `/api/instancias/` de abajo.
+    if (u.includes('/addons')) return Promise.resolve(json({}))
     if (u.endsWith('/baja')) return Promise.resolve(json({ slug: 'acme', backup: null, npm: null }))
     if (u.includes('/api/instancias/')) return Promise.resolve(json(INSTANCIA))
     if (u.includes('/api/planes')) return Promise.resolve(json([]))

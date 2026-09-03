@@ -110,6 +110,22 @@ def servicios_falsos(inventario):
         {"key": "pro", "label": "Pro", "precio": 100, "modulos": ["stock", "ventas"]},
     ]
 
+    # Add-ons: el motor los lee/escribe en la base viva de la instancia; acá se
+    # simula ese estado por slug para medir el ida y vuelta del router.
+    _addon_estado: dict = {}
+
+    def set_addon(slug, addon, habilitado):
+        if addon != "mayorista":
+            raise ServiceErrorFalso(f"Add-on desconocido: {addon!r}.")
+        llamadas.append(("addon", slug, addon, habilitado))
+        _addon_estado.setdefault(slug, {"mayorista": False})[addon] = habilitado
+
+    def addons_de_instancia(slug):
+        return dict(_addon_estado.get(slug, {"mayorista": False}))
+
+    servicios.set_addon = set_addon
+    servicios.addons_de_instancia = addons_de_instancia
+
     inventario.servicios = servicios
     servicios.llamadas = llamadas
     return servicios
@@ -463,3 +479,27 @@ def test_la_libracore_instalada_le_da_identidad_y_credencial_de_panel_a_la_insta
         "panel del dueño va a recibir 401 de toda instancia nueva y mostrarla "
         "como «sin respuesta». Hace falta el pin >= v1.42.0."
     )
+
+
+# ── add-ons ──────────────────────────────────────────────────────────────────
+
+def test_listar_addons(admin):
+    r = admin.get("/api/instancias/acme/addons")
+    assert r.status_code == 200
+    assert r.json() == {"mayorista": False}
+
+
+def test_cambiar_addon_prende_y_devuelve_el_estado(admin, servicios_falsos):
+    r = admin.put("/api/instancias/acme/addons/mayorista", json={"habilitado": True})
+    assert r.status_code == 200
+    assert r.json() == {"mayorista": True}
+    assert ("addon", "acme", "mayorista", True) in servicios_falsos.llamadas
+
+
+def test_cambiar_addon_desconocido_da_422(admin):
+    r = admin.put("/api/instancias/acme/addons/inexistente", json={"habilitado": True})
+    assert r.status_code == 422
+
+
+def test_los_addons_piden_sesion(cliente):
+    assert cliente.get("/api/instancias/acme/addons").status_code == 401
