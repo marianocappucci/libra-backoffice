@@ -259,7 +259,7 @@ export function Instancia() {
             clave: 'usuarios',
             label: 'Usuarios',
             icono: Users,
-            contenido: <Usuarios basePath={rutaUsuarios(slug)} />,
+            contenido: <Usuarios basePath={rutaUsuarios(slug)} icono={Users} />,
           },
           // Última pestaña, y no junto a Usuarios: sólo significa algo en la
           // instancia demo de cada producto. En el resto la propia instancia
