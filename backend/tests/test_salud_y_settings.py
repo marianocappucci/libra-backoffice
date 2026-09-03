@@ -7,7 +7,6 @@ from libra_backoffice.settings import ConfiguracionInvalida, cargar_settings
 
 from .conftest import PASSWORD, TOKEN, USUARIO, construir_settings
 
-
 # ── Salud ───────────────────────────────────────────────────────────────────
 
 def test_salud_reporta_arranque_y_features(logueado):
