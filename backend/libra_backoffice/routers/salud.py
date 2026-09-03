@@ -34,7 +34,7 @@ opuesto y se nota menos.
 import asyncio
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 from fastapi import APIRouter, Depends, Request
 
@@ -94,7 +94,7 @@ async def salud(request: Request):
         "backoffice": {
             "version": os.environ.get("APP_VERSION", "desconocida"),
             "commit": os.environ.get("APP_COMMIT", "desconocido"),
-            "arrancado": datetime.fromtimestamp(_ARRANQUE, timezone.utc).isoformat(),
+            "arrancado": datetime.fromtimestamp(_ARRANQUE, UTC).isoformat(),
             "uptime_segundos": int(time.time() - _ARRANQUE),
         },
         "instancias": list(estados),
