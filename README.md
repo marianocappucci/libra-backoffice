@@ -116,6 +116,8 @@ cd frontend && npm install && npm run build
 | `FEATURES` | sí | Lista separada por comas. Un valor desconocido **no arranca**. |
 | `ADMIN_PANEL_USER` / `ADMIN_PANEL_PASSWORD` | sí | Credenciales del superadmin. Sin password, se rechaza todo login. |
 | `SECRET_KEY` | sí | Firma la cookie de sesión **de este backoffice**. |
+| `ADMIN_PANEL_TOTP_SECRET` | no | Segundo factor del superadmin (libraauth v0.36.0). Con esto seteado el login pide el código del autenticador. Se genera con `python -m libraauth.totp <producto>`; un valor inválido no deja levantar. |
+| `ADMIN_PANEL_ESTADO_PATH` | no | Archivo donde el bloqueo por intentos fallidos sobrevive al reinicio. El compose de ejemplo lo monta en un volumen. |
 | `REPO_ROOT` | sí | Checkout del producto en el host, donde vive `clientes/`. |
 | `DB_FILENAME` | sí | Nombre del archivo de base de cada instancia (`contalibra.db`). |
 | `LIBRA_SERVICE_TOKEN` | con `smtp`/`usuarios` | El mismo valor que tienen seteado las instancias de este producto. |
