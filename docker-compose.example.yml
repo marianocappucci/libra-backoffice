@@ -66,7 +66,15 @@ services:
       # Restolibra escriben los suyos: `/api/config/smtp` y `/api/usuarios`.
       - SMTP_PATH=/admin/smtp
       - USERS_PATH=/users
+      # F2 (2026-09-05): el bloqueo por intentos fallidos vive en este archivo
+      # y sobrevive al reinicio del contenedor. Va en un volumen propio (abajo)
+      # y no en el checkout del producto, que es de git.
+      - ADMIN_PANEL_ESTADO_PATH=/var/lib/libra-backoffice/login.json
+      # El segundo factor NO va acá: `ADMIN_PANEL_TOTP_SECRET` es un secreto y
+      # vive en /etc/<producto>-admin.env junto a ADMIN_PANEL_PASSWORD. Se
+      # genera con `python -m libraauth.totp <producto>` dentro del contenedor.
     volumes:
+      - estado:/var/lib/libra-backoffice
       # El checkout del producto, espejado: de acá sale `clientes/` y de acá se
       # importan `panel_admin.py` / `nuevo_cliente.py` / `plans.py`.
       - /root/gestiolibra:/root/gestiolibra
@@ -74,6 +82,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - stack-net
+
+volumes:
+  estado:
 
 networks:
   stack-net:
