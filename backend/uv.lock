@@ -583,7 +583,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.111,<1" },
     { name = "httpx", specifier = ">=0.27,<1" },
     { name = "libraauth", git = "https://github.com/marianocappucci/libraauth.git?rev=v0.36.0" },
-    { name = "libracore", git = "https://github.com/marianocappucci/libracore.git?rev=v1.77.0" },
+    { name = "libracore", git = "https://github.com/marianocappucci/libracore.git?rev=v1.88.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.13" },
@@ -606,8 +606,8 @@ dependencies = [
 
 [[package]]
 name = "libracore"
-version = "1.77.0"
-source = { git = "https://github.com/marianocappucci/libracore.git?rev=v1.77.0#18b5bfaf6adcaa981aeb10cfdbdc7bb642f24627" }
+version = "1.88.0"
+source = { git = "https://github.com/marianocappucci/libracore.git?rev=v1.88.0#2e2adb79e649b831ea78ebcb81e498861fa020ec" }
 dependencies = [
     { name = "cryptography" },
     { name = "fastapi" },
