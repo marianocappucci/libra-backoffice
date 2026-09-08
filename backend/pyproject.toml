@@ -12,7 +12,7 @@ dependencies = [
     # `AdminAuth` (sesion del superadmin del backoffice) y el guard de token de
     # servicio (v0.7.0), que es lo que permite administrar N instancias sin ser
     # usuario de ninguna.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.36.0",
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.37.0",
     # `admin.services` (inventario y ciclo de vida de instancias) y
     # `security_headers`. v1.3.0: el alta ya no elige un puerto que otro
     # producto del host tiene bindeado, y hace rollback del directorio si el
@@ -97,7 +97,7 @@ dependencies = [
     # v1.77.0: `libracore.admin.services.set_addon` / `addons_de_instancia` — el
     # backoffice puede prender/apagar un add-on (`plans.ADDONS`, ej. `mayorista`)
     # de una instancia, vía docker exec contra su PostgreSQL. Ver routers/instancias.py.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.77.0",
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.89.0",
     "fastapi>=0.111,<1",
     "uvicorn[standard]>=0.30,<1",
     # El control plane le habla a cada instancia por HTTP.
