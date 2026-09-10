@@ -192,6 +192,13 @@ def cambiar_plan(slug: str, datos: PlanIn, request: Request):
 # estado vive en la base viva de la instancia, así que el servicio llega por
 # `docker exec` (ver libracore.admin.services.set_addon). El producto sin
 # add-ons devuelve `{}` y el frontend no muestra la sección.
+#
+# 🔑 El valor de cada add-on es `true`, `false` o **`null`**, y `null` significa
+# "no se pudo leer": el `docker exec` falló (contenedor caído, o el producto no
+# exporta el contrato `app.database.get_modulos`). Se pasa tal cual al frontend
+# a propósito — traducirlo a `false` acá sería volver al defecto que esto
+# arregla: una pantalla que muestra el add-on apagado cuando en realidad no
+# sabe. El motivo concreto queda en el log del proceso.
 @router.get("/instancias/{slug}/addons")
 def listar_addons(slug: str, request: Request):
     servicios = _servicios(request)
