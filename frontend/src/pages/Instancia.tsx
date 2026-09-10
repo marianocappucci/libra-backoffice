@@ -61,7 +61,13 @@ export function Instancia() {
   const [ocupado, setOcupado] = useState(false)
   // Add-ons de la instancia. `{}` si el producto no tiene ninguno: la sección
   // no se muestra. Ver libracore.admin.services.addons_de_instancia.
-  const [addons, setAddons] = useState<Record<string, boolean>>({})
+  //
+  // 🔑 `null` = **no se pudo leer** (contenedor caído, o el producto no exporta
+  // el contrato `app.database.get_modulos`). NO es lo mismo que apagado, y por
+  // eso no se dibuja como un checkbox vacío: se muestra el estado desconocido y
+  // el toggle queda deshabilitado. Un tilde vacío que en realidad significa "no
+  // sé" es peor que un error, porque el que mira decide con él.
+  const [addons, setAddons] = useState<Record<string, boolean | null>>({})
 
   const releer = useCallback(async () => {
     setInstancia(await backoffice.instancia(slug))
@@ -215,11 +221,23 @@ export function Instancia() {
               {Object.entries(addons).map(([addon, on]) => (
                 <label key={addon} className="flex items-center gap-2 text-sm">
                   <Checkbox
-                    checked={on}
-                    disabled={ocupado}
+                    checked={on === true}
+                    disabled={ocupado || on === null}
                     onCheckedChange={(v) => cambiarAddon(addon, v === true)}
                   />
                   {addon}
+                  {on === null && (
+                    <span
+                      className="text-xs text-muted-foreground"
+                      title={
+                        'El estado vive en la base de la instancia y se lee por docker exec. ' +
+                        'La lectura falló: el contenedor puede estar caído, o el producto no ' +
+                        'exporta app.database.get_modulos. Revisar el log del backoffice.'
+                      }
+                    >
+                      (no se pudo leer)
+                    </span>
+                  )}
                 </label>
               ))}
             </div>

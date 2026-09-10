@@ -503,3 +503,19 @@ def test_cambiar_addon_desconocido_da_422(admin):
 
 def test_los_addons_piden_sesion(cliente):
     assert cliente.get("/api/instancias/acme/addons").status_code == 401
+
+
+def test_el_estado_ilegible_viaja_como_null(admin, servicios_falsos):
+    """🔑 El `None` del motor tiene que llegar al frontend como `null`, no `false`.
+
+    Es el defecto que este cambio arregla, visto desde el router: si acá se
+    normalizara a `false` —o si el serializador lo hiciera— la pantalla volvería
+    a mostrar el add-on apagado cuando en realidad no se pudo leer.
+    """
+    servicios_falsos.addons_de_instancia = lambda slug: {"mayorista": None}
+
+    r = admin.get("/api/instancias/acme/addons")
+
+    assert r.status_code == 200
+    assert r.json() == {"mayorista": None}
+    assert '"mayorista":null' in r.text.replace(" ", "")
