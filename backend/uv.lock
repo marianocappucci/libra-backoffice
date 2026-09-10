@@ -641,7 +641,7 @@ requires-dist = [
     { name = "anyio", marker = "extra == 'dev'", specifier = ">=4" },
     { name = "fastapi", specifier = ">=0.111,<1" },
     { name = "httpx", specifier = ">=0.27,<1" },
-    { name = "libraauth", git = "https://github.com/marianocappucci/libraauth.git?rev=v0.37.0" },
+    { name = "libraauth", git = "https://github.com/marianocappucci/libraauth.git?rev=v0.38.0" },
     { name = "libracore", git = "https://github.com/marianocappucci/libracore.git?rev=v1.92.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6" },
@@ -652,8 +652,8 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "libraauth"
-version = "0.37.0"
-source = { git = "https://github.com/marianocappucci/libraauth.git?rev=v0.37.0#4a8e73e74d57e5c8e7a6c8af183b168a3c320811" }
+version = "0.38.0"
+source = { git = "https://github.com/marianocappucci/libraauth.git?rev=v0.38.0#a8c17b5f65e9bcde97833077dde261e9f7e58219" }
 dependencies = [
     { name = "argon2-cffi" },
     { name = "cryptography" },
