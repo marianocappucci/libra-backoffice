@@ -122,10 +122,19 @@ export const backoffice = {
   cambiarPlan: (slug: string, plan: string) =>
     api.put<Instancia>(`/api/instancias/${slug}/plan`, { plan }),
   // Add-ons (módulos sueltos, fuera de los planes). `{}` si el producto no tiene.
+  //
+  // 🔑 El valor es `boolean | null`, y `null` es **"no se pudo leer"**, no
+  // "apagado". El estado vive en la base de la instancia y llega por
+  // `docker exec`: si el contenedor está caído o el snippet no importa, el
+  // motor devuelve `null` en vez de inventar un `false`. Tratar los dos igual
+  // es lo que hizo que el backoffice mostrara `modo_simple` destildado en una
+  // instancia que lo tenía prendido.
   addons: (slug: string) =>
-    api.get<Record<string, boolean>>(`/api/instancias/${slug}/addons`),
+    api.get<Record<string, boolean | null>>(`/api/instancias/${slug}/addons`),
   cambiarAddon: (slug: string, addon: string, habilitado: boolean) =>
-    api.put<Record<string, boolean>>(`/api/instancias/${slug}/addons/${addon}`, { habilitado }),
+    api.put<Record<string, boolean | null>>(`/api/instancias/${slug}/addons/${addon}`, {
+      habilitado,
+    }),
   // `mensaje` sólo pesa en `pausar` y `suspender`; en `activar` el motor lo
   // limpia, así que mandarlo o no da lo mismo.
   accion: (slug: string, accion: string, mensaje = '') =>

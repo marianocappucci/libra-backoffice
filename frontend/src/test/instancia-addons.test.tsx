@@ -23,7 +23,7 @@ function json(body: unknown, status = 200) {
 
 let fetchMock: ReturnType<typeof vi.fn>
 
-function montar(addons: Record<string, boolean>) {
+function montar(addons: Record<string, boolean | null>) {
   fetchMock = vi.fn((url: string, opts?: { method?: string }) => {
     const u = String(url)
     if (u.includes('/api/instancias/acme/addons')) {
@@ -70,5 +70,39 @@ describe('add-ons de la instancia', () => {
     montar({})
     expect(await screen.findByText('ACME SA')).toBeInTheDocument()
     expect(screen.queryByText('Add-ons')).not.toBeInTheDocument()
+  })
+
+  // 🔑 `null` = el motor no pudo leer el estado (contenedor caído, o el producto
+  // no exporta `app.database.get_modulos`). Antes llegaba como `false` y la
+  // pantalla dibujaba un tilde vacío: eso fue lo que mostró `modo_simple`
+  // destildado en una instancia que lo tenía prendido.
+  it('estado ilegible: lo dice, y no lo dibuja como apagado', async () => {
+    montar({ mayorista: null })
+
+    expect(await screen.findByText('mayorista')).toBeInTheDocument()
+    expect(screen.getByText('(no se pudo leer)')).toBeInTheDocument()
+  })
+
+  it('estado ilegible: no deja togglear a ciegas', async () => {
+    const usuario = userEvent.setup()
+    montar({ mayorista: null })
+
+    const chk = await screen.findByRole('checkbox')
+    expect(chk).toBeDisabled()
+
+    await usuario.click(chk)
+
+    const put = fetchMock.mock.calls.find(([, o]) => o?.method === 'PUT')
+    expect(put).toBeFalsy()
+  })
+
+  // El control que hace falta para que los dos de arriba prueben algo: sin él,
+  // "mostrar siempre (no se pudo leer)" también pasaría.
+  it('apagado de verdad no dice nada raro y sí deja togglear', async () => {
+    montar({ mayorista: false })
+
+    expect(await screen.findByText('mayorista')).toBeInTheDocument()
+    expect(screen.queryByText('(no se pudo leer)')).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox')).not.toBeDisabled()
   })
 })
