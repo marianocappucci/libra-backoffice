@@ -18,7 +18,10 @@ name: Alerta CI
 
 on:
   workflow_run:
-    workflows: ["CI"]
+    # "Scripts de los productos" corre también a diario: su rojo programado
+    # es un producto cuyo `configure()` ya no entiende la libracore de la
+    # imagen, y sin esta línea nadie lo vería hasta abrir el panel.
+    workflows: ["CI", "Scripts de los productos"]
     types: [completed]
   # Para probar el canal sin tener que romper nada a proposito.
   workflow_dispatch:
