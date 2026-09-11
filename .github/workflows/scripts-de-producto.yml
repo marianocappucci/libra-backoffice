@@ -1,0 +1,94 @@
+name: Scripts del producto vs backoffice
+
+# 🔴 Workflow REUSABLE: lo llaman los PRs de los productos Libra
+# (`uses: marianocappucci/libra-backoffice/.github/workflows/scripts-de-producto.yml@main`).
+#
+# Importa `scripts/panel_admin.py` y `scripts/nuevo_cliente.py` del producto con
+# la libracore que tiene HOY la imagen de este backoffice, que es exactamente lo
+# que hace el contenedor `<producto>-admin` en producción. Los argumentos de
+# `configure()` los elige el producto, pero los tiene que entender la libracore
+# de acá, que se mueve con otro pin. Ese acoplamiento tumbó los paneles tres
+# veces (`v1.3.0`; `backup_zip` el 2026-08-12; `migraciones` el 2026-08-24).
+#
+# Por qué un reusable acá y no un paso copiado en cada producto: la lógica y la
+# fuente de la versión son de ESTE repo. Si mañana cambia cómo se instala la
+# imagen o qué scripts se importan, se cambia una vez y los ocho productos se
+# enteran solos, sin un PR por repo.
+#
+# Por qué el entorno sale de `backend/uv.lock` de `main` y no de un
+# `pip install libracore==<pin>`: el Dockerfile construye la imagen con
+# `uv sync --frozen --no-dev --no-editable` sobre ese lock, así que este es el
+# mismo conjunto de paquetes que corre en el contenedor —libracore con el commit
+# resuelto y todas sus dependencias—, leído en el momento del CI y sin ninguna
+# versión escrita acá. El pin lo mueve el bump; este workflow no se entera ni
+# necesita enterarse.
+#
+# Sin secrets: libracore, libraauth y este repo son públicos, y el chequeo no
+# toca ninguna base ni variable de producción. Si un script llegara a necesitar
+# una variable de entorno para importarse, este paso se pone rojo — y está bien,
+# porque el contenedor del backoffice tampoco la tiene.
+
+on:
+  workflow_call:
+    inputs:
+      backoffice_ref:
+        description: >-
+          Ref de libra-backoffice contra el que se verifica. `main` es lo que
+          está desplegado (la imagen se construye de `main`); otro valor sólo
+          sirve para probar un cambio de este repo antes de promoverlo.
+        type: string
+        default: main
+      producto_repo:
+        description: Repo del producto (owner/nombre). Vacío = el que llama.
+        type: string
+        default: ""
+      producto_ref:
+        description: Ref del producto. Vacío = el del evento que llama (el merge del PR).
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  scripts:
+    name: scripts vs backoffice
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del producto
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.producto_repo || github.repository }}
+          ref: ${{ inputs.producto_ref }}
+          path: producto
+
+      - name: Checkout de libra-backoffice
+        uses: actions/checkout@v7
+        with:
+          repository: marianocappucci/libra-backoffice
+          ref: ${{ inputs.backoffice_ref }}
+          path: backoffice
+
+      # 3.12: la de la imagen (`FROM python:3.12-slim`).
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.12.10"
+
+      # Las mismas banderas que el Dockerfile. `--frozen` y no `--locked`: el
+      # lock se valida en el CI del backoffice; acá se reproduce la imagen, y la
+      # imagen no re-resuelve.
+      - name: Entorno de la imagen del backoffice (backend/uv.lock)
+        working-directory: backoffice/backend
+        run: |
+          uv sync --frozen --no-dev --no-editable
+          echo "backoffice: $(git -C .. rev-parse --short HEAD) (${{ inputs.backoffice_ref }})"
+          grep -o 'libracore.git@v[0-9.]*' pyproject.toml
+
+      - name: Importar los scripts del producto con esa libracore
+        run: |
+          backoffice/backend/.venv/bin/python -m libra_backoffice.verificar_producto producto \
+            --etiqueta "${{ inputs.producto_repo || github.repository }}@${{ inputs.producto_ref || github.head_ref || github.ref_name }}"
