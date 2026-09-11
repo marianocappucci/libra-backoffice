@@ -25,6 +25,19 @@ SCRIPT_CON_ARGUMENTO_NUEVO = (
 
 
 @pytest.fixture(autouse=True)
+def fuera_de_actions(monkeypatch):
+    """La salida cambia de prefijo dentro de GitHub Actions (`::error` en vez de
+    `ERROR:`), y el runner define `GITHUB_ACTIONS=true` para toda la suite.
+
+    Sin esto los tests pasaban en local y fallaban en el CI —pasó en el primer
+    push de este archivo—: asertaban sobre el prefijo de un entorno que no era
+    el que corría. El caso de Actions tiene su propio test, que la vuelve a
+    poner.
+    """
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def sin_scripts_importados():
     """Deja `sys.modules`, `sys.path` y el `_cfg` del motor como estaban.
 
