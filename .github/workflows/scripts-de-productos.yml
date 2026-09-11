@@ -1,0 +1,92 @@
+name: Scripts de los productos
+
+# El otro lado del chequeo de `scripts-de-producto.yml`. Aquel lo corre cada
+# producto en su PR, contra el backoffice de `main`: agarra el `configure()`
+# nuevo de un producto. Este lo corre ESTE repo contra `main` y `develop` de los
+# ocho productos, con la libracore de este checkout: agarra el bump del pin de
+# acá que deja atrás a un producto — el caso del `v1.3.0` y, al revés, lo que
+# pasaría si alguien baja el pin.
+#
+# Mismo módulo que el reusable (`libra_backoffice.verificar_producto`), mismo
+# recorrido que el `/health`. Un solo job que clona los dieciséis refs y lanza
+# un proceso por cada uno —el import queda cacheado en `sys.modules` bajo un
+# nombre pelado, así que dos productos en el mismo proceso se pisarían—, en vez
+# de dieciséis jobs: el reporte queda en un solo lugar y el entorno se instala
+# una vez.
+#
+# MedLibra entra acá aunque su PR no lo tenga todavía: es sólo leer su repo
+# público.
+#
+# El `schedule` es lo que cubre el tiempo entre PRs: un producto puede mergear
+# un `configure()` nuevo a `develop` sin que este repo tenga ningún PR abierto.
+# Corre sobre `main` (el cron sólo dispara en la rama default), que es lo que
+# está desplegado. Un rojo acá avisa por Telegram — este workflow está en la
+# lista de `alerta-ci.yml`.
+
+on:
+  pull_request:
+    branches: [develop, main]
+  schedule:
+    # 06:41 en Argentina (UTC-3). Minuto no redondo a propósito, para no caer
+    # en el pico de schedules de GitHub.
+    - cron: "41 9 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  productos:
+    name: scripts de los productos vs este pin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: backoffice
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.12.10"
+
+      # Las mismas banderas que el Dockerfile: lo que se verifica es la imagen
+      # que saldría de este commit, no el entorno de desarrollo.
+      - name: Entorno de la imagen (backend/uv.lock)
+        working-directory: backoffice/backend
+        run: |
+          uv sync --frozen --no-dev --no-editable
+          grep -o 'libracore.git@v[0-9.]*' pyproject.toml
+
+      - name: Importar los scripts de main y develop de cada producto
+        run: |
+          set -u
+          # La lista de productos es la de los contenedores `<producto>-admin`
+          # del VPS. Un producto nuevo con backoffice se suma acá.
+          productos="contalibra restolibra gestiolibra ventalibra libradesk libracargo libraclub medlibra"
+          rojos=""
+          for producto in $productos; do
+            for rama in main develop; do
+              echo "::group::$producto@$rama"
+              destino="productos/$producto-$rama"
+              if ! git clone -q --depth 1 --branch "$rama" "https://github.com/marianocappucci/$producto.git" "$destino"; then
+                echo "::error::No se pudo clonar $producto@$rama."
+                rojos="$rojos $producto@$rama(clone)"
+              elif ! backoffice/backend/.venv/bin/python -m libra_backoffice.verificar_producto \
+                     "$destino" --etiqueta "$producto@$rama"; then
+                rojos="$rojos $producto@$rama"
+              fi
+              echo "::endgroup::"
+            done
+          done
+          if [ -n "$rojos" ]; then
+            echo "::error::Scripts que no cargan con la libracore de este commit:$rojos"
+            exit 1
+          fi
+          echo "Los 16 refs cargan con la libracore de este commit."

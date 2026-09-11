@@ -94,6 +94,12 @@ dependencies = [
     # camino. Desde este mismo cambio lo toca — ver `verificar_scripts()` en
     # `inventario.py`. Un contenedor `healthy` con el panel muerto es la razon
     # por la que las tres veces nos enteramos por el humano.
+    #
+    # 🔑 Desde el 2026-09-11 el acoplamiento se mira en el CI, de los dos lados
+    # y antes del deploy: el PR que mueva este pin corre
+    # `.github/workflows/scripts-de-productos.yml`, que importa los scripts de
+    # `main` y `develop` de los ocho productos con la libracore resultante; y
+    # cada producto corre `scripts-de-producto.yml` contra la de `main` de acá.
     # v1.77.0: `libracore.admin.services.set_addon` / `addons_de_instancia` — el
     # backoffice puede prender/apagar un add-on (`plans.ADDONS`, ej. `mayorista`)
     # de una instancia, vía docker exec contra su PostgreSQL. Ver routers/instancias.py.

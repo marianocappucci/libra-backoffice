@@ -43,6 +43,12 @@ class Instancia:
         return asdict(self)
 
 
+# Los scripts del producto que este backoffice importa, en el orden en que los
+# importa. Nombre de módulo, no de archivo: es lo que resuelve
+# `libracore.admin.services` con el `sys.path` que le arma `configure()`.
+SCRIPTS_DEL_PRODUCTO = ("panel_admin", "nuevo_cliente")
+
+
 class InstanciaDesconocida(LookupError):
     """No hay ninguna instancia con ese slug."""
 
@@ -76,9 +82,26 @@ class Inventario:
         Los dos y no sólo `panel_admin`: `nuevo_cliente` es el del alta, y el
         `configure()` que rompe está en los dos archivos. Uno solo dejaría el
         alta rota con el semáforo en verde.
+
+        El mismo recorrido lo hace `verificar_producto.py` en el CI —de los
+        productos y de este repo—, script por script para poder decir cuál
+        falló. Por eso los dos pasan por `cargar_script()` y la lista vive en
+        `SCRIPTS_DEL_PRODUCTO`: si un día se suma un tercer script, el `/health`
+        y el CI se enteran juntos.
         """
-        self.servicios._pa()
-        self.servicios._nc()
+        for nombre in SCRIPTS_DEL_PRODUCTO:
+            self.cargar_script(nombre)
+
+    def cargar_script(self, nombre: str):
+        """Importa UN script del producto por el camino real del panel.
+
+        Por `libracore.admin.services` y no con un `import` propio: lo que hay
+        que probar es lo que hace el contenedor —el `sys.path` que arma
+        `services.configure()` y el import diferido de `_pa()`/`_nc()`—, no
+        una imitación que podría divergir en silencio.
+        """
+        cargadores = {"panel_admin": self.servicios._pa, "nuevo_cliente": self.servicios._nc}
+        return cargadores[nombre]()
 
     def listar(self) -> list[Instancia]:
         return [self._a_instancia(c) for c in self.servicios.listar_clientes()]
