@@ -128,11 +128,40 @@ def _montar_frontend(app: FastAPI, frontend_dist: str | None) -> None:
         # estáticos es legítimo; fallar acá rompería la suite de tests.
         return
 
-    app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
+    app.mount("/assets", AssetsInmutables(directory=dist / "assets"), name="assets")
 
     @app.get("/{ruta:path}", include_in_schema=False)
     def spa(ruta: str):
         archivo = dist / ruta
         if ruta and archivo.is_file():
-            return FileResponse(archivo)
-        return FileResponse(index)
+            # Los sueltos del dist (favicon, manifest) tampoco llevan hash en
+            # el nombre: mismo criterio que el index.
+            return FileResponse(archivo, headers={"Cache-Control": SIN_CACHE})
+        return FileResponse(index, headers={"Cache-Control": SIN_CACHE})
+
+
+#: El estándar de la familia (`estandares-desarrollo`, «Cabeceras de caché del
+#: frontend»). El `index.html` es el único archivo del build que conserva el
+#: nombre y el que dice cuál es el bundle de ahora: sin cabecera, el navegador
+#: aplica caché heurística y después de un deploy sigue pidiendo el bundle
+#: viejo —que existe y viene con 200—, así que no se ve el cambio y no falla
+#: nada en ninguna capa. Medido acá el 2026-09-12.
+#:
+#: `no-cache` **no** es "no guardes": es "guardá, pero revalidá siempre". Ojo:
+#: `FileResponse` manda `ETag` pero no atiende pedidos condicionales, así que
+#: la revalidación trae el index completo (unos cientos de bytes).
+SIN_CACHE = "no-cache, must-revalidate"
+
+#: Los assets, al revés: el nombre lleva el hash del contenido y nunca cambia
+#: de contenido. Cachearlos para siempre es seguro **porque** el index
+#: revalida: cuando el contenido cambia, cambia el nombre.
+PARA_SIEMPRE = "public, max-age=31536000, immutable"
+
+
+class AssetsInmutables(StaticFiles):
+    """`StaticFiles` con la cabecera de caché larga."""
+
+    def file_response(self, *args, **kwargs):
+        respuesta = super().file_response(*args, **kwargs)
+        respuesta.headers["Cache-Control"] = PARA_SIEMPRE
+        return respuesta
