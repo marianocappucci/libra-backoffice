@@ -1,4 +1,4 @@
-from .conftest import PASSWORD, USUARIO
+from .conftest import login, PASSWORD, USUARIO
 
 
 def test_health_no_pide_auth(cliente):
@@ -8,13 +8,13 @@ def test_health_no_pide_auth(cliente):
 
 
 def test_login_con_credenciales_correctas(cliente):
-    resp = cliente.post("/api/login", json={"username": USUARIO, "password": PASSWORD})
+    resp = login(cliente, {"username": USUARIO, "password": PASSWORD})
     assert resp.status_code == 200
     assert resp.json() == {"username": USUARIO}
 
 
 def test_login_con_password_incorrecta(cliente):
-    resp = cliente.post("/api/login", json={"username": USUARIO, "password": "cualquiera"})
+    resp = login(cliente, {"username": USUARIO, "password": "cualquiera"})
     assert resp.status_code == 401
 
 
@@ -42,7 +42,7 @@ def test_logout_corta_la_sesion(logueado):
 
 def test_rate_limit_de_login(cliente):
     for _ in range(5):
-        cliente.post("/api/login", json={"username": USUARIO, "password": "mal"})
+        login(cliente, {"username": USUARIO, "password": "mal"})
     # El sexto intento ya no evalúa credenciales: corta antes.
-    resp = cliente.post("/api/login", json={"username": USUARIO, "password": PASSWORD})
+    resp = login(cliente, {"username": USUARIO, "password": PASSWORD})
     assert resp.status_code == 429

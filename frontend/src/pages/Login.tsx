@@ -18,6 +18,10 @@ export const Login = createLogin<Superadmin>({
   // La misma imagen corre con y sin 2FA según su `.env`, por eso se pregunta
   // en runtime y no se decide en el build.
   totpPath: '/api/login/opciones',
+  // Captcha «No soy un robot» (libraauth v0.40.0, libra-ui v0.69.0). El
+  // backend lo exige siempre; la sonda es el mismo GET del desafío, y
+  // «Ingresar» queda deshabilitado hasta tildar la casilla.
+  captchaPath: '/api/captcha',
   // El detalle real del backend: con segundo factor el 401 dice "usuario,
   // contraseña o código", y el 429 del bloqueo dice cuánto esperar. El
   // genérico de libra-ui taparía los dos.

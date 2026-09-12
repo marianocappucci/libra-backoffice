@@ -19,6 +19,7 @@ from libra_backoffice.app import create_app
 from libra_backoffice.cliente_instancia import ClienteInstancia
 
 from .conftest import (
+    login,
     PASSWORD,
     TOKEN,
     USUARIO,
@@ -182,7 +183,7 @@ def test_sin_la_feature_las_rutas_no_existen(tmp_path, instancias_falsas, invent
     app.state.cliente_instancia = ClienteInstancia(
         token=TOKEN, transport=_TransporteDeInstancias(instancias_falsas))
     with TestClient(app, base_url="https://testserver") as c:
-        c.post("/api/login", json={"username": USUARIO, "password": PASSWORD})
+        login(c, {"username": USUARIO, "password": PASSWORD})
 
         assert c.get("/api/instancias/acme/demo-codigos").status_code == 404
 
@@ -242,7 +243,7 @@ def test_el_catch_all_de_la_spa_se_traduce_a_404(
         token=TOKEN, transport=_TransporteDeInstancias(apps))
 
     with TestClient(app, base_url="https://testserver") as c:
-        c.post("/api/login", json={"username": USUARIO, "password": PASSWORD})
+        login(c, {"username": USUARIO, "password": PASSWORD})
 
         r = c.get("/api/instancias/beta/demo-codigos")
 
@@ -273,7 +274,7 @@ def test_el_catch_all_tampoco_deja_emitir(tmp_path, instancias_falsas, inventari
         token=TOKEN, transport=_TransporteDeInstancias(apps))
 
     with TestClient(app, base_url="https://testserver") as c:
-        c.post("/api/login", json={"username": USUARIO, "password": PASSWORD})
+        login(c, {"username": USUARIO, "password": PASSWORD})
 
         r = c.post("/api/instancias/beta/demo-codigos", json=ALTA)
 
@@ -302,7 +303,7 @@ def test_la_demo_de_verdad_sigue_contestando(tmp_path, instancias_falsas, invent
         token=TOKEN, transport=_TransporteDeInstancias(apps))
 
     with TestClient(app, base_url="https://testserver") as c:
-        c.post("/api/login", json={"username": USUARIO, "password": PASSWORD})
+        login(c, {"username": USUARIO, "password": PASSWORD})
 
         r = c.get("/api/instancias/acme/demo-codigos")
 
