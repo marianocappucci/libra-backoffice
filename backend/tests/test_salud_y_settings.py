@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from libra_backoffice.app import create_app
 from libra_backoffice.settings import ConfiguracionInvalida, cargar_settings
 
-from .conftest import PASSWORD, TOKEN, USUARIO, construir_settings
+from .conftest import login, PASSWORD, TOKEN, USUARIO, construir_settings
 
 # ── Salud ───────────────────────────────────────────────────────────────────
 
@@ -142,7 +142,7 @@ def _app(tmp_path, instancias_falsas, inventario, features):
         token=TOKEN, transport=_TransporteDeInstancias(instancias_falsas)
     )
     c = TestClient(app, base_url="https://testserver")
-    c.post("/api/login", json={"username": USUARIO, "password": PASSWORD})
+    login(c, {"username": USUARIO, "password": PASSWORD})
     return c
 
 
