@@ -272,20 +272,26 @@ def test_una_ruta_de_react_devuelve_el_index(tmp_path, inventario, dist):
     assert "<div id=root>" in c.get("/instancias/acme/smtp").text
 
 
-@pytest.mark.parametrize("ruta", ["/", "/instancias/acme/smtp", "/index.html"])
-def test_el_index_no_se_cachea(tmp_path, inventario, dist, ruta):
+@pytest.mark.parametrize(
+    "ruta", ["/", "/instancias/acme/smtp", "/index.html", "/favicon.ico"]
+)
+def test_lo_que_no_lleva_hash_revalida_siempre(tmp_path, inventario, dist, ruta):
     """El index decide qué bundle se carga: sin esto, el navegador reusa el
-    viejo después de un deploy y hay que forzar un Ctrl+F5."""
+    viejo después de un deploy y hay que forzar un Ctrl+F5. Los sueltos del
+    dist (favicon) tampoco llevan hash en el nombre."""
+    (dist / "favicon.ico").write_bytes(b"\x00")
     app = create_app(construir_settings(tmp_path), inventario=inventario, frontend_dist=str(dist))
     c = TestClient(app, base_url="https://testserver")
-    assert c.get(ruta).headers["cache-control"] == "no-cache"
+    assert c.get(ruta).headers["cache-control"] == "no-cache, must-revalidate"
 
 
-def test_los_assets_no_llevan_no_cache(tmp_path, inventario, dist):
-    """Los assets tienen hash en el nombre — cachearlos fuerte es lo correcto."""
+def test_los_assets_se_cachean_para_siempre(tmp_path, inventario, dist):
+    """Llevan el hash en el nombre: es seguro PORQUE el index revalida."""
     app = create_app(construir_settings(tmp_path), inventario=inventario, frontend_dist=str(dist))
     c = TestClient(app, base_url="https://testserver")
-    assert c.get("/assets/app.js").headers.get("cache-control") != "no-cache"
+    respuesta = c.get("/assets/app.js")
+    assert respuesta.status_code == 200
+    assert respuesta.headers["cache-control"] == "public, max-age=31536000, immutable"
 
 
 def test_la_api_gana_sobre_el_fallback(tmp_path, inventario, dist):
