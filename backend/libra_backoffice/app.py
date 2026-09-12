@@ -15,6 +15,7 @@ es lo que hace posible administrar N instancias desde un solo proceso — ver
 Qué sale de dónde:
 
 - `AdminAuth` (sesión del superadmin) — `libraauth.admin_auth`, sin cambios.
+- Captcha del login — `libraauth.captcha` (v0.40.0).
 - Token de servicio contra las instancias — `libraauth v0.7.0`.
 - Inventario y ciclo de vida — `libracore.admin.services`.
 - Cabeceras de seguridad — `libracore.security_headers`.
@@ -26,6 +27,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from libraauth.admin_auth import AdminAuth
+from libraauth.captcha import Captcha
 from libracore.security_headers import SecurityHeadersMiddleware
 
 from .cliente_instancia import ClienteInstancia
@@ -52,6 +54,13 @@ def create_app(
 
     app.state.settings = settings
     app.state.admin_auth = AdminAuth(dev_secret_fallback=_DEV_SECRET)
+    # El captcha del login. **Uno por proceso** y no uno por request: la lista
+    # de desafíos ya usados vive adentro, y dos la partirían en dos — un desafío
+    # resuelto serviría una vez en cada una. Alcanza porque el contenedor corre
+    # un solo uvicorn (el CMD del Dockerfile no pasa `--workers`); con varios
+    # habría que mover esa lista a algo compartido. Las claves salen del mismo
+    # `SECRET_KEY` que la cookie, por HKDF y con un `info` propio.
+    app.state.captcha = Captcha(app.state.admin_auth.secret_key)
     app.state.inventario = inventario if inventario is not None else construir_inventario(settings)
     app.state.cliente_instancia = ClienteInstancia(
         token=settings.service_token,

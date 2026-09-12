@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from libra_backoffice.app import create_app
 from libra_backoffice.inventario import construir_inventario
 
-from .conftest import PASSWORD, USUARIO, construir_settings
+from .conftest import login, PASSWORD, USUARIO, construir_settings
 
 
 class ServiceErrorFalso(Exception):
@@ -135,7 +135,7 @@ def servicios_falsos(inventario):
 def admin(tmp_path, instancias_falsas, inventario, servicios_falsos):
     app = create_app(construir_settings(tmp_path), inventario=inventario)
     c = TestClient(app, base_url="https://testserver")
-    c.post("/api/login", json={"username": USUARIO, "password": PASSWORD})
+    login(c, {"username": USUARIO, "password": PASSWORD})
     return c
 
 

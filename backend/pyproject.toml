@@ -12,7 +12,12 @@ dependencies = [
     # `AdminAuth` (sesion del superadmin del backoffice) y el guard de token de
     # servicio (v0.7.0), que es lo que permite administrar N instancias sin ser
     # usuario de ninguna.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.38.0",
+    #
+    # v0.40.0 (2026-09-11): `libraauth.captcha`, el captcha ALTCHA del login, y
+    # —de v0.39.0— `ip_del_request`, que lee la IP desde la derecha. Las dos
+    # cosas las cablea `routers/auth.py`: este backoffice no usa el router de
+    # libraauth, así que subir el pin sin tocar el router no cambia nada.
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.40.0",
     # `admin.services` (inventario y ciclo de vida de instancias) y
     # `security_headers`. v1.3.0: el alta ya no elige un puerto que otro
     # producto del host tiene bindeado, y hace rollback del directorio si el

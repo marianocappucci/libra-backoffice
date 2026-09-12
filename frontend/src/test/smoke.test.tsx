@@ -50,9 +50,17 @@ const CREADA = {
   panel_token: 'el-token-de-panel-de-esta-instancia',
 }
 
-/** Sin sesión: `/api/me` responde 401, como con la cookie vencida. */
+/** Sin sesión: `/api/me` responde 401, como con la cookie vencida.
+ *
+ *  La sonda del captcha contesta 404, no 401: el backend real la sirve sin
+ *  sesión, y un 401 ahí lo tomaría el api-client de libra-ui por sesión
+ *  vencida y recargaría en `/login`. El recuadro en sí —el web component y su
+ *  worker— lo prueba libra-ui; acá sólo el cableado. */
 function sinSesion() {
-  fetchMock.mockImplementation(() => Promise.resolve(json({ detail: 'No autenticado' }, 401)))
+  fetchMock.mockImplementation((url: string) => {
+    if (String(url) === '/api/captcha') return Promise.resolve(json({ detail: 'Not Found' }, 404))
+    return Promise.resolve(json({ detail: 'No autenticado' }, 401))
+  })
 }
 
 type Init = { method?: string } | undefined
@@ -137,6 +145,20 @@ describe('guard de rutas', () => {
     conSesion()
     montar('/cualquier-cosa')
     expect(await screen.findByText('ACME SA')).toBeInTheDocument()
+  })
+})
+
+describe('login', () => {
+  it('pregunta por el captcha a la ruta del backoffice', async () => {
+    // Lo único de este repo en el captcha: que la ruta sea la que monta
+    // `routers/auth.py`. Con otra, la sonda cae en el catch-all de la SPA, el
+    // recuadro no aparece y el backend rechaza cada login con un 400.
+    sinSesion()
+    montar('/instancias')
+    await screen.findByRole('button', { name: /ingresar/i })
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.map((c) => String(c[0]))).toContain('/api/captcha')
+    })
   })
 })
 

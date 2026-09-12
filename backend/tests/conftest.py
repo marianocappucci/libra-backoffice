@@ -13,8 +13,10 @@ from dataclasses import replace
 
 import httpx
 import pytest
+from altcha import Challenge, Payload, solve_challenge
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from libraauth.captcha import Captcha
 from libraauth.demo_codigos import DemoCodigoRepository
 from libraauth.models import Base as AuthBase
 from libraauth.repository import UsernameTaken, UserRepository
@@ -39,8 +41,31 @@ PASSWORD = "una-password-de-prueba"
 TOKEN = "token-de-servicio-de-prueba"
 
 
+def captcha_barato(secret_key: str) -> Captcha:
+    """El mismo mecanismo con un costo que no gasta CPU en cada login.
+
+    El de producción tarda del orden de un segundo por desafío, y la suite
+    loguea decenas de veces. Lo que cambia es sólo cuánto trabajo pide: firma,
+    vencimiento y anti-replay son los mismos. Que la app de verdad arme el caro
+    lo cuida `test_la_app_emite_desafios_con_el_costo_de_produccion`.
+    """
+    return Captcha(secret_key, costo=1, contador_min=1, contador_rango=5)
+
+
+def resolver_captcha(cliente) -> str:
+    """Lo que hace el widget en el navegador: pedir un desafío y resolverlo."""
+    ch = Challenge.from_dict(cliente.get("/api/captcha").json())
+    return Payload(ch, solve_challenge(ch)).to_base64()
+
+
+def login(cliente, datos: dict, **kwargs):
+    """El login como llega desde la pantalla: con un captcha resuelto."""
+    return cliente.post("/api/login", json={**datos, "captcha": resolver_captcha(cliente)}, **kwargs)
+
+
 @pytest.fixture(autouse=True)
 def entorno(monkeypatch):
+    monkeypatch.setattr("libra_backoffice.app.Captcha", captcha_barato)
     monkeypatch.setenv("ENV", "development")
     monkeypatch.setenv("ADMIN_PANEL_USER", USUARIO)
     monkeypatch.setenv("ADMIN_PANEL_PASSWORD", PASSWORD)
@@ -235,6 +260,6 @@ def cliente(tmp_path, instancias_falsas, inventario):
 
 @pytest.fixture
 def logueado(cliente):
-    resp = cliente.post("/api/login", json={"username": USUARIO, "password": PASSWORD})
+    resp = login(cliente, {"username": USUARIO, "password": PASSWORD})
     assert resp.status_code == 200, resp.text
     return cliente
