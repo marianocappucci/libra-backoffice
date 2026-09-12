@@ -28,7 +28,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from libraauth.admin_auth import AdminAuth
 from libraauth.captcha import Captcha
-from libracore.security_headers import SecurityHeadersMiddleware
+from libracore.security_headers import CSP_SPA, SecurityHeadersMiddleware
 
 from .cliente_instancia import ClienteInstancia
 from .inventario import construir_inventario
@@ -50,7 +50,12 @@ def create_app(
     settings = settings or cargar_settings()
 
     app = FastAPI(title=f"{settings.product_name} — Backoffice", docs_url=None, redoc_url=None)
-    app.add_middleware(SecurityHeadersMiddleware)
+    # `CSP_SPA` y no la CSP por defecto: esa es la de las apps Jinja2, y le
+    # habilita a esta SPA `'unsafe-inline'` en `script-src` y `cdn.jsdelivr.net`,
+    # que no usa. Vite emite el JS como archivos del propio origen, y el worker
+    # del captcha (libra-ui) también: sale de `/assets/`, no de `blob:`. Es la
+    # misma política que los ocho productos desde libracore v1.89.0.
+    app.add_middleware(SecurityHeadersMiddleware, csp=CSP_SPA)
 
     app.state.settings = settings
     app.state.admin_auth = AdminAuth(dev_secret_fallback=_DEV_SECRET)
