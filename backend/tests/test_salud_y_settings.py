@@ -272,6 +272,22 @@ def test_una_ruta_de_react_devuelve_el_index(tmp_path, inventario, dist):
     assert "<div id=root>" in c.get("/instancias/acme/smtp").text
 
 
+@pytest.mark.parametrize("ruta", ["/", "/instancias/acme/smtp", "/index.html"])
+def test_el_index_no_se_cachea(tmp_path, inventario, dist, ruta):
+    """El index decide qué bundle se carga: sin esto, el navegador reusa el
+    viejo después de un deploy y hay que forzar un Ctrl+F5."""
+    app = create_app(construir_settings(tmp_path), inventario=inventario, frontend_dist=str(dist))
+    c = TestClient(app, base_url="https://testserver")
+    assert c.get(ruta).headers["cache-control"] == "no-cache"
+
+
+def test_los_assets_no_llevan_no_cache(tmp_path, inventario, dist):
+    """Los assets tienen hash en el nombre — cachearlos fuerte es lo correcto."""
+    app = create_app(construir_settings(tmp_path), inventario=inventario, frontend_dist=str(dist))
+    c = TestClient(app, base_url="https://testserver")
+    assert c.get("/assets/app.js").headers.get("cache-control") != "no-cache"
+
+
 def test_la_api_gana_sobre_el_fallback(tmp_path, inventario, dist):
     app = create_app(construir_settings(tmp_path), inventario=inventario, frontend_dist=str(dist))
     c = TestClient(app, base_url="https://testserver")

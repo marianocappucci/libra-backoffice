@@ -133,6 +133,12 @@ def _montar_frontend(app: FastAPI, frontend_dist: str | None) -> None:
     @app.get("/{ruta:path}", include_in_schema=False)
     def spa(ruta: str):
         archivo = dist / ruta
-        if ruta and archivo.is_file():
+        if ruta and archivo.is_file() and archivo != index:
             return FileResponse(archivo)
-        return FileResponse(index)
+        # index.html es el único archivo del build sin hash en el nombre: es
+        # el que decide qué bundle se carga. Sin Cache-Control el navegador
+        # puede reusarlo heurísticamente después de un deploy y seguir
+        # sirviendo el bundle viejo aunque el servidor ya tenga el nuevo.
+        # no-cache (no no-store) obliga a revalidar siempre, y el ETag hace
+        # que esa revalidación sea un 304 barato cuando no cambió.
+        return FileResponse(index, headers={"Cache-Control": "no-cache"})
