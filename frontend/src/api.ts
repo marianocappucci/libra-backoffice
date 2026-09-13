@@ -98,6 +98,28 @@ export type EstadoInstancia = {
   detalle: string
 }
 
+// El doble factor (TOTP) del superadmin. `origen` distingue de dónde sale el
+// secreto activo: `"entorno"` es `ADMIN_PANEL_TOTP_SECRET`, fijo por variable
+// de entorno y no editable desde acá; `"archivo"` es el que este backoffice
+// generó y guardó en `totp.json`, junto al estado de login
+// (`ADMIN_PANEL_ESTADO_PATH`); `null` es que no hay ninguno
+// activo todavía. `enrolable` es si ESTE backoffice tiene dónde guardar un
+// secreto nuevo — sin `ADMIN_PANEL_ESTADO_PATH` configurado, no.
+export type TotpEstado = {
+  activo: boolean
+  origen: 'entorno' | 'archivo' | null
+  enrolable: boolean
+}
+
+// Lo que `iniciar` devuelve mientras el enrolamiento está pendiente de
+// confirmar. `secreto` es el texto para cargar a mano si el QR no se puede
+// escanear; `qr` ya viene como data URI listo para un `<img src>`.
+export type TotpIniciado = {
+  secreto: string
+  uri: string
+  qr: string
+}
+
 export type Salud = {
   producto: { slug: string; nombre: string }
   features: string[]
@@ -115,6 +137,17 @@ export const backoffice = {
   instancia: (slug: string) => api.get<Instancia>(`/api/instancias/${slug}`),
   planes: () => api.get<Plan[]>('/api/planes'),
   salud: () => api.get<Salud>('/api/salud'),
+
+  // Doble factor del superadmin. `iniciarTotp` no lleva cuerpo: el backend
+  // genera el secreto y devuelve el QR para escanear. La confirmación y la
+  // desactivación piden el código vigente del autenticador — sin eso, ninguna
+  // de las dos cambia `activo`.
+  totp: () => api.get<TotpEstado>('/api/seguridad/totp'),
+  iniciarTotp: () => api.post<TotpIniciado>('/api/seguridad/totp/iniciar'),
+  confirmarTotp: (codigo: string) =>
+    api.post<{ activo: true }>('/api/seguridad/totp/confirmar', { codigo }),
+  desactivarTotp: (codigo: string) =>
+    api.post<{ activo: false }>('/api/seguridad/totp/desactivar', { codigo }),
 
   crear: (datos: AltaIn) => api.post<InstanciaCreada>('/api/instancias', datos),
   editar: (slug: string, datos: { nombre: string; domain: string }) =>

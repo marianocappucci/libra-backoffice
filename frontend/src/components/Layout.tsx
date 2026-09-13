@@ -3,7 +3,7 @@
 // El branding es genérico a propósito: la misma imagen sirve a los seis
 // productos y el nombre real llega por `/api/salud`. Poner "Gestiolibra" acá
 // obligaría a una imagen por producto, que es justo lo que este repo evita.
-import { Activity, Server } from 'lucide-react'
+import { Activity, Server, ShieldCheck } from 'lucide-react'
 import { createLayout } from 'libra-ui/Layout'
 
 import { useAuth } from '../auth'
@@ -17,6 +17,7 @@ export const Layout = createLayout<Superadmin>({
   navItems: [
     { to: '/instancias', label: 'Instancias', icon: Server },
     { to: '/salud', label: 'Salud', icon: Activity },
+    { to: '/seguridad', label: 'Seguridad', icon: ShieldCheck },
   ],
   // El superadmin no tiene `name` ni `role`: el default del Layout mostraría
   // dos líneas vacías en el pie del sidebar.
