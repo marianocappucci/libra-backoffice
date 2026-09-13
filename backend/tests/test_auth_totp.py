@@ -54,10 +54,19 @@ class TestConSegundoFactor:
     def test_las_opciones_lo_anuncian(self, con_totp):
         assert con_totp.get("/api/login/opciones").json() == {"totp": True}
 
-    def test_sin_codigo_401(self, con_totp):
+    def test_sin_codigo_devuelve_el_desafio_del_paso_2(self, con_totp):
+        """Desde la F4 (login en dos pasos, libraauth v0.42.0) esto YA NO es
+        un 401: es el paso 1, y clave correcta sin código devuelve el desafío
+        del paso 2 en vez de rechazar — ver `test_login_dos_pasos.py` para el
+        contrato completo. El 401 por clave o código incorrectos lo sigue
+        cubriendo `test_codigo_incorrecto_es_el_mismo_401_que_clave_incorrecta`,
+        en el camino de un paso."""
         resp = login(con_totp, {"username": USUARIO, "password": PASSWORD})
-        assert resp.status_code == 401
-        assert resp.json()["detail"] == "Usuario, contraseña o código incorrectos."
+        assert resp.status_code == 200
+        datos = resp.json()
+        assert datos["requiere_codigo"] is True
+        assert isinstance(datos["desafio"], str) and datos["desafio"]
+        assert "set-cookie" not in resp.headers
 
     def test_codigo_incorrecto_es_el_mismo_401_que_clave_incorrecta(self, con_totp):
         """Un solo mensaje: no se le dice a quien prueba cuál de los dos acertó."""
