@@ -76,6 +76,55 @@ La baja es `POST .../baja` y no `DELETE` porque lleva un cuerpo obligatorio (la
 confirmación del slug) y el `api-client` de `libra-ui` —compartido por los seis
 productos— manda `DELETE` sin cuerpo.
 
+## Seguridad: doble factor del superadmin
+
+Pantalla `/seguridad`, presente en los seis backoffices — no es una `feature`
+de la tabla de arriba: aplica siempre, como el login mismo. Deja encender o
+apagar el segundo factor TOTP del superadmin sin tocar el `.env` ni recrear el
+contenedor (F3, 2026-09-13; `AdminAuth.iniciar_totp` / `confirmar_totp` /
+`desactivar_totp` de libraauth v0.41.0, detrás de `routers/seguridad.py`).
+
+- **Encender no activa nada solo.** `POST /api/seguridad/totp/iniciar` genera
+  un secreto PENDIENTE y devuelve el QR —`data:image/svg+xml`, armado con
+  [segno](https://pypi.org/project/segno/)— y el secreto en texto para cargar
+  a mano si el QR no se puede escanear. Recién queda activo al
+  `POST /api/seguridad/totp/confirmar` con un código vigente del autenticador;
+  hasta entonces no hay nada guardado como activo.
+- **Desactivar exige el código del autenticador**, igual que confirmar: sin uno
+  vigente no hay forma de apagar el segundo factor, ni siquiera desde este
+  backoffice.
+- Los tres endpoints comparten el rate limiting del login
+  (`rate_limit_excedido` / `registrar_intento_fallido`, por IP vía
+  `ip_del_request`): una sesión de backoffice robada no puede probar códigos
+  sin límite.
+- **El entorno sigue mandando cuando está presente.** Con
+  `ADMIN_PANEL_TOTP_SECRET` seteado, `origen` es `"entorno"`: la pantalla
+  muestra el interruptor deshabilitado, y encender, confirmar o desactivar
+  desde acá da 409 — se cambia desde el `.env`, como antes de la F3.
+
+### `totp.json`, y cómo recuperarse si se pierde el teléfono
+
+El secreto enrolado desde la pantalla se guarda en `totp.json`, **hermano** del
+archivo del bloqueo de login: mismo directorio que `ADMIN_PANEL_ESTADO_PATH`
+(`/var/lib/libra-backoffice/` en el compose de ejemplo, dentro del volumen
+`estado`). Sin `ADMIN_PANEL_ESTADO_PATH` configurado (ni `ADMIN_PANEL_TOTP_PATH`
+a mano) no hay dónde guardarlo: la pantalla lo dice (`enrolable: false`) y
+encender da 409.
+
+El archivo falla **cerrado**, a diferencia del de intentos fallidos: uno
+ilegible o con forma inesperada deja el segundo factor `activo: true` y el
+login cerrado — pidiendo un código que ya nadie puede dar — en vez de apagarse
+solo. Para recuperarse (teléfono perdido, o archivo roto), desde el host:
+
+```bash
+docker exec <producto>-admin rm /var/lib/libra-backoffice/totp.json
+```
+
+Y volver a encenderlo desde la pantalla. Un `rm` y no una edición a mano: el
+archivo no tiene un formato que valga la pena tocar con un editor, y un JSON
+escrito a mano con una forma apenas distinta es exactamente lo que el
+fail-closed de arriba trata como "roto".
+
 ## Qué reusa
 
 Casi todo. Lo genuinamente nuevo de este repo es el ensamblado y el proxy.
@@ -118,6 +167,7 @@ cd frontend && npm install && npm run build
 | `SECRET_KEY` | sí | Firma la cookie de sesión **de este backoffice**. |
 | `ADMIN_PANEL_TOTP_SECRET` | no | Segundo factor del superadmin (libraauth v0.36.0). Con esto seteado el login pide el código del autenticador. Se genera con `python -m libraauth.totp <producto>`; un valor inválido no deja levantar. |
 | `ADMIN_PANEL_ESTADO_PATH` | no | Archivo donde el bloqueo por intentos fallidos sobrevive al reinicio. El compose de ejemplo lo monta en un volumen. |
+| `ADMIN_PANEL_TOTP_PATH` | no | Archivo del secreto TOTP enrolado en runtime desde la pantalla Seguridad (F3). Default: `totp.json` al lado de `ADMIN_PANEL_ESTADO_PATH`. Ver "Seguridad: doble factor del superadmin". |
 | `REPO_ROOT` | sí | Checkout del producto en el host, donde vive `clientes/`. |
 | `DB_FILENAME` | sí | Nombre del archivo de base de cada instancia (`contalibra.db`). |
 | `LIBRA_SERVICE_TOKEN` | con `smtp`/`usuarios` | El mismo valor que tienen seteado las instancias de este producto. |

@@ -7,6 +7,7 @@ import { Login } from './pages/Login'
 import { Instancia } from './pages/Instancia'
 import { Instancias } from './pages/Instancias'
 import { Salud } from './pages/Salud'
+import { Seguridad } from './pages/Seguridad'
 
 function RutaProtegida({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth()
@@ -48,6 +49,14 @@ export default function App() {
         element={
           <RutaProtegida>
             <Salud />
+          </RutaProtegida>
+        }
+      />
+      <Route
+        path="/seguridad"
+        element={
+          <RutaProtegida>
+            <Seguridad />
           </RutaProtegida>
         }
       />

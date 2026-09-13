@@ -32,7 +32,7 @@ from libracore.security_headers import CSP_SPA, SecurityHeadersMiddleware
 
 from .cliente_instancia import ClienteInstancia
 from .inventario import construir_inventario
-from .routers import auth, config_instancia, instancias, salud
+from .routers import auth, config_instancia, instancias, salud, seguridad
 from .settings import Settings, cargar_settings
 
 # Fallback de desarrollo para el `SECRET_KEY` de la cookie. `_resolve_secret_key`
@@ -109,6 +109,7 @@ def create_app(
         return {"ok": True, "producto": settings.product_slug}
 
     app.include_router(auth.router)
+    app.include_router(seguridad.router)
     app.include_router(instancias.router)
     app.include_router(config_instancia.router_smtp)
     app.include_router(config_instancia.router_usuarios)
