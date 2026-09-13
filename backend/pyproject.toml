@@ -17,7 +17,11 @@ dependencies = [
     # —de v0.39.0— `ip_del_request`, que lee la IP desde la derecha. Las dos
     # cosas las cablea `routers/auth.py`: este backoffice no usa el router de
     # libraauth, así que subir el pin sin tocar el router no cambia nada.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.40.0",
+    #
+    # v0.41.0 (F3, 2026-09-13): `AdminAuth.iniciar_totp` / `confirmar_totp` /
+    # `desactivar_totp` — el segundo factor enrolable en runtime que consume
+    # `routers/seguridad.py`, sin tocar el `.env` ni recrear el contenedor.
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.41.0",
     # `admin.services` (inventario y ciclo de vida de instancias) y
     # `security_headers`. v1.3.0: el alta ya no elige un puerto que otro
     # producto del host tiene bindeado, y hace rollback del directorio si el
@@ -113,6 +117,7 @@ dependencies = [
     "uvicorn[standard]>=0.30,<1",
     # El control plane le habla a cada instancia por HTTP.
     "httpx>=0.27,<1",
+    "segno>=1.6.6",
 ]
 
 [project.optional-dependencies]
