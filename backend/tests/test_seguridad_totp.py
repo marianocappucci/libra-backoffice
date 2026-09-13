@@ -136,7 +136,12 @@ def test_confirmar_activa_y_habilita_el_login_con_codigo(reloj_fijo, logueado):
     assert c.get("/api/login/opciones").json() == {"totp": True}
 
     c.post("/api/logout")
-    assert login(c, {"username": USUARIO, "password": PASSWORD}).status_code == 401
+    # Desde la F4 (login en dos pasos, libraauth v0.42.0) esto ya no es un
+    # 401: es el paso 1, y devuelve el desafío del paso 2 en vez de rechazar
+    # (ver `test_login_dos_pasos.py` para el contrato completo).
+    sin_codigo = login(c, {"username": USUARIO, "password": PASSWORD})
+    assert sin_codigo.status_code == 200
+    assert sin_codigo.json()["requiere_codigo"] is True
     siguiente = _codigo(secreto, PASO + 1)
     assert login(c, {"username": USUARIO, "password": PASSWORD, "codigo": siguiente}).status_code == 200
 

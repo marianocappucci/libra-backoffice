@@ -76,6 +76,41 @@ La baja es `POST .../baja` y no `DELETE` porque lleva un cuerpo obligatorio (la
 confirmación del slug) y el `api-client` de `libra-ui` —compartido por los seis
 productos— manda `DELETE` sin cuerpo.
 
+## Login en dos pasos
+
+Desde la F4 (2026-09-13, libraauth v0.42.0) el login con segundo factor se
+hace en **dos pasos**, cada uno su propio endpoint — antes `POST /api/login`
+exigía usuario, contraseña y código TOTP los tres juntos, así que no había
+forma de mostrar el código en una pantalla separada sin que el backend ya lo
+supiera de antemano.
+
+| Paso | Endpoint | Qué recibe | Qué contesta |
+|---|---|---|---|
+| 1 | `POST /api/login` | `{username, password, captcha, codigo?}` | Sin segundo factor: `200` + cookie, como siempre. Con segundo factor y **sin** `codigo`: `200` sin cookie, `{"requiere_codigo": true, "desafio": "..."}`. Clave mala: `401`. |
+| 2 | `POST /api/login/codigo` | `{desafio, codigo}`, sin sesión | Desafío vencido/inválido: `401` "El código venció: volvé a ingresar.". Código malo: `401` "Código incorrecto.". Los dos bien: `200` + cookie. |
+
+Orden de validaciones en cada uno, y por qué:
+
+1. **`rate_limit_excedido(ip)` primero, en los dos.** Es el mismo contador por
+   IP (`AdminAuth`, ver "Seguridad" más abajo): un intento fallido en
+   cualquiera de los dos pasos cuenta para el mismo bloqueo, y una IP
+   bloqueada recibe `429` sin llegar a validar nada más.
+2. **El captcha, sólo en el paso 1** — el paso 2 no lo pide: ya pagó el costo
+   del captcha al pasar el paso 1, y pedirlo de nuevo no compra nada.
+3. **`codigo` no vacío en `/api/login` es el camino de un solo paso, sin
+   cambios**: `check_credentials` de siempre, para el cliente que todavía
+   manda los tres datos juntos. Nada de esto le cambia el comportamiento.
+
+🔴 **Consecuencia asumida (ADR-016 de libraauth): con 2FA encendido, el paso 1
+le confirma a quien prueba contraseñas que la clave es correcta** — antes,
+con el único endpoint, clave y código mal daban el mismo `401` y no se podía
+distinguir cuál de los dos falló. Se mitiga con lo que ya protegía el login
+entero: el captcha (ADR-014) encarece cada contraseña probada, el bloqueo por
+IP (ADR-009) sigue cortando antes de agotar los cinco intentos, y una sesión
+de verdad exige además el código — superar el paso 1 no abre nada por sí
+solo. El desafío del paso 1 no sirve como cookie de sesión ni al revés:
+`emitir_desafio_totp` lo firma con un salt propio, distinto del de la cookie.
+
 ## Seguridad: doble factor del superadmin
 
 Pantalla `/seguridad`, presente en los seis backoffices — no es una `feature`

@@ -16,11 +16,12 @@ export const Login = createLogin<Superadmin>({
   // pública, y dónde viven las credenciales no tiene por qué estar a la vista.
   forgotPasswordHint: '¿Olvidaste tu contraseña? La cambia quien administra el servidor.',
   //
-  // Segundo factor (F2, libraauth v0.36.0): la sonda dice si este backoffice
-  // tiene `ADMIN_PANEL_TOTP_SECRET`; sólo entonces aparece el campo del código.
-  // La misma imagen corre con y sin 2FA según su `.env`, por eso se pregunta
-  // en runtime y no se decide en el build.
-  totpPath: '/api/login/opciones',
+  // Segundo factor: ya no hay sonda ni campo arriba (libra-ui v0.70.0). La
+  // pantalla pide usuario, contraseña y captcha; si el backend contesta que
+  // falta el código, abre un modal con un casillero por dígito y lo manda a
+  // `segundoFactorPath` (ver `auth.ts`). Lo decide el backend en cada login,
+  // así que la misma imagen sigue sirviendo con y sin 2FA.
+  //
   // Captcha «No soy un robot» (libraauth v0.40.0, libra-ui v0.69.0). El
   // backend lo exige siempre; la sonda es el mismo GET del desafío, y
   // «Ingresar» queda deshabilitado hasta tildar la casilla.
