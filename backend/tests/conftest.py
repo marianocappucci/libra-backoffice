@@ -14,12 +14,12 @@ from dataclasses import replace
 import httpx
 import pytest
 from altcha import Challenge, Payload, solve_challenge
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from libraauth.captcha import Captcha
 from libraauth.demo_codigos import DemoCodigoRepository
 from libraauth.models import Base as AuthBase
-from libraauth.repository import UsernameTaken, UserRepository
+from libraauth.repository import UserRepository
 from libraauth.session_auth import (
     SERVICE_TOKEN_ENV,
     build_demo_codigos_router,
@@ -27,7 +27,7 @@ from libraauth.session_auth import (
     json_api_require_admin_o_servicio,
 )
 from libraauth.smtp_settings import SmtpSettingsRepository
-from pydantic import BaseModel
+from libraauth.usuarios import build_users_router
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -77,28 +77,24 @@ def entorno(monkeypatch):
 
 # ── La "instancia" ──────────────────────────────────────────────────────────
 
-class _UsuarioIn(BaseModel):
-    username: str
-    name: str
-    password: str
-    role: str = "staff"
-
-
-class _UsuarioUpdate(BaseModel):
-    name: str
-    role: str
-    active: bool
-
-
-def construir_instancia_falsa(db_path, *, es_demo=False):
-    """Una instancia de producto: router de SMTP de libraauth + router de
-    usuarios propio, que es exactamente cómo están los seis.
+def construir_instancia_falsa(db_path, *, es_demo=False, roles=("staff", "admin")):
+    """Una instancia de producto: los routers de `libraauth` (SMTP, demo y
+    ahora usuarios).
 
     `es_demo=True` monta además el ABM de códigos de acceso, igual que hace el
     producto cuando tiene `DEMO_MODE` y `DEMO_USERNAME`. **Las dos variantes
     hacen falta**: sin la que NO es demo, un proxy que devolviera lo mismo para
     cualquier instancia pasaría en verde, y ahí es donde se le muestran los
     códigos de la demo a quien abrió la ficha de un cliente.
+
+    `roles` es el vocabulario de ESTA instancia (`("admin", "operador",
+    "cajero")` en Contalibra, por ejemplo) — lo valida `build_users_router`,
+    no el backoffice. Antes de libraauth v0.43.0 (ADR-018) el router de
+    usuarios NO era de libraauth: cada producto tenía el propio, y este doble
+    reproducía uno de los cuatro FastAPI (sin `DELETE`, sin
+    `PUT /{id}/password`, sin `GET /{id}`). Con el contrato único, la
+    instancia de la suite pasa a ser la real —el mismo motivo por el que ya
+    usa el router real de SMTP—: si la factory cambia, esta suite se entera.
     """
     engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
     AuthBase.metadata.create_all(engine)
@@ -106,7 +102,7 @@ def construir_instancia_falsa(db_path, *, es_demo=False):
 
     app = FastAPI()
     app.state.smtp_settings = SmtpSettingsRepository(sesiones)
-    app.state.users = UserRepository(sesiones)
+    app.state.users = UserRepository(sesiones, roles=roles)
     app.state.session_auth = None  # nadie con cookie: sólo se entra por token
 
     @app.get("/health")
@@ -118,33 +114,9 @@ def construir_instancia_falsa(db_path, *, es_demo=False):
         app.state.demo_codigos = DemoCodigoRepository(sesiones)
         app.include_router(build_demo_codigos_router())
 
-    # El router de usuarios NO es de libraauth: cada producto tiene el suyo.
-    # Este reproduce el de los cuatro FastAPI, guard de servicio incluido.
-    from fastapi import APIRouter, Depends
-
-    usuarios = APIRouter(prefix="/users", dependencies=[Depends(json_api_require_admin_o_servicio)])
-
-    @usuarios.get("")
-    def listar():
-        return app.state.users.list()
-
-    @usuarios.post("", status_code=201)
-    def crear(datos: _UsuarioIn):
-        try:
-            return app.state.users.create(**datos.model_dump())
-        except UsernameTaken:
-            raise HTTPException(409, f"Ya existe un usuario '{datos.username}'.")
-        except ValueError as exc:
-            raise HTTPException(422, str(exc))
-
-    @usuarios.put("/{user_id}")
-    def editar(user_id: str, datos: _UsuarioUpdate):
-        try:
-            return app.state.users.update(user_id, **datos.model_dump())
-        except KeyError:
-            raise HTTPException(404, "Usuario no encontrado.")
-
-    app.include_router(usuarios)
+    app.include_router(
+        build_users_router(roles=roles, admin_guard=json_api_require_admin_o_servicio)
+    )
     return app
 
 

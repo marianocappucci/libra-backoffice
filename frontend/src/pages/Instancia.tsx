@@ -32,7 +32,7 @@ import { Pestanas } from '../components/Pestanas'
 import { CodigosDemo } from '../components/CodigosDemo'
 import {
   ApiError, backoffice, rutaCodigosDemo, rutaSmtp, rutaUsuarios,
-  type Instancia as TInstancia, type Plan,
+  type Instancia as TInstancia, type Plan, type RolUsuario,
 } from '../api'
 
 function describirError(err: unknown): string {
@@ -68,6 +68,12 @@ export function Instancia() {
   // el toggle queda deshabilitado. Un tilde vacío que en realidad significa "no
   // sé" es peor que un error, porque el que mira decide con él.
   const [addons, setAddons] = useState<Record<string, boolean | null>>({})
+  // Roles del `Select` de la pestaña Usuarios — `USERS_ROLES` de este
+  // producto, vía `/api/salud` (mismo camino que ya usa esa pantalla para
+  // `features`). Aparte del resto: si el producto no tiene la feature
+  // `salud` prendida, esto no puede tumbar la pantalla entera — `[]` deja que
+  // `Usuarios` (libra-ui) caiga en su propio default (`staff`/`admin`).
+  const [roles, setRoles] = useState<RolUsuario[]>([])
 
   const releer = useCallback(async () => {
     setInstancia(await backoffice.instancia(slug))
@@ -84,6 +90,13 @@ export function Instancia() {
       .catch((err) => setError(describirError(err)))
       .finally(() => setCargando(false))
   }, [slug])
+
+  useEffect(() => {
+    // Aparte del `Promise.all` de arriba: un 404 acá (producto sin la
+    // feature `salud`) no puede tirar abajo el resto de la pantalla — sólo
+    // deja a `Usuarios` con su propio default de roles.
+    backoffice.salud().then((s) => setRoles(s.usuarios_roles ?? [])).catch(() => {})
+  }, [])
 
   async function ejecutar(fn: () => Promise<TInstancia>, mensaje: string) {
     setOcupado(true)
@@ -314,7 +327,23 @@ export function Instancia() {
             clave: 'usuarios',
             label: 'Usuarios',
             icono: Users,
-            contenido: <Usuarios basePath={rutaUsuarios(slug)} icono={Users} />,
+            contenido: (
+              <Usuarios
+                basePath={rutaUsuarios(slug)}
+                icono={Users}
+                roles={roles.length ? roles : undefined}
+                // El proxy de DELETE (`config_instancia.eliminar_usuario`)
+                // existe siempre que la feature `usuarios` está prendida —no
+                // depende de si la instancia ya adoptó `build_users_router`:
+                // si no lo adoptó, el intento falla con el error de la
+                // instancia (404/405), que la pantalla ya sabe mostrar.
+                permitirEliminar
+                // Sin `usuarioActualId`: el superadmin del backoffice no es
+                // un usuario de NINGUNA instancia (se autentica por entorno,
+                // ver `Superadmin` en `api.ts`), así que no hay "uno mismo"
+                // que ocultar en esta grilla.
+              />
+            ),
           },
           // Última pestaña, y no junto a Usuarios: sólo significa algo en la
           // instancia demo de cada producto. En el resto la propia instancia

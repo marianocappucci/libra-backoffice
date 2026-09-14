@@ -8,12 +8,21 @@ Jinja2 que redirige el navegador y lo equivocado para una SPA, donde el
 Este módulo lo envuelve para que la API conteste `401` y el frontend pueda
 mandar al login por su cuenta.
 """
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Request, Response
 
 
-def admin_actual(request: Request) -> str:
-    """El superadmin logueado, o `401`."""
-    user = request.app.state.admin_auth.current_user(request)
+def admin_actual(request: Request, response: Response) -> str:
+    """El superadmin logueado, o `401`.
+
+    `response` no se usa acá adentro: se le pasa a `current_user` para que
+    herede la renovación deslizante de la sesión (8 h sin uso, ADR-017 de
+    libraauth v0.43.0). `AdminAuth.current_user` la declara opcional
+    justamente para esto — un consumidor que la envuelve en su propia
+    dependencia, como este módulo, tiene que agregarle el parámetro a mano
+    para heredarla; FastAPI la inyecta sola por `Depends`, la declare o no
+    cada endpoint. Sin este parámetro el backoffice loguea a todos afuera a
+    las 8 h en punto, las usen o no en el medio."""
+    user = request.app.state.admin_auth.current_user(request, response)
     if not user:
         raise HTTPException(status_code=401, detail="No autenticado.")
     return user

@@ -22,6 +22,11 @@ FEATURES_VALIDAS = frozenset(
     {"instancias", "smtp", "usuarios", "salud", "demos"}
 )
 
+#: Mismo vocabulario que ya tenía el `Select` de rol de `Usuarios` de
+#: libra-ui antes de la prop `roles` (ver `Settings.usuarios_roles`) — para
+#: no cambiarle nada a un producto que no setee `USERS_ROLES`.
+ROLES_POR_DEFECTO: tuple[str, ...] = ("staff", "admin")
+
 
 class ConfiguracionInvalida(RuntimeError):
     """El entorno no alcanza para levantar el backoffice."""
@@ -53,6 +58,13 @@ class Settings:
     demo_codigos_path: str = "/admin/demo-codigos"
     service_token: str = ""
     timeout_instancia: float = 5.0
+    # Vocabulario de roles de ESTE producto — no es el mismo en toda la
+    # familia (`("admin", "staff")` en seis, `("admin", "operador", "cajero")`
+    # en Contalibra, con `"mozo"` sumado en Restolibra — ver el docstring de
+    # `libraauth.usuarios.build_users_router`). Sólo alimenta la pantalla
+    # (el `Select` de rol de `Usuarios` de libra-ui, vía `/api/salud`); la
+    # instancia sigue siendo quien valida el rol de verdad.
+    usuarios_roles: tuple[str, ...] = ROLES_POR_DEFECTO
 
     extra: dict = field(default_factory=dict)
 
@@ -63,6 +75,27 @@ class Settings:
     def features_por_instancia(self) -> list[str]:
         """Las que se resuelven hablándole a una instancia, no al host."""
         return [f for f in ("smtp", "usuarios", "demos") if f in self.features]
+
+    @property
+    def roles_para_frontend(self) -> list[dict]:
+        """`usuarios_roles` en la forma `Rol[]` que espera `Usuarios` de
+        libra-ui (`{value, label}`). La etiqueta se deriva del valor —ningún
+        producto de la familia pidió hoy una etiqueta distinta al nombre del
+        rol capitalizado— así que `USERS_ROLES` no necesita una sintaxis con
+        etiqueta propia."""
+        return [{"value": r, "label": r.capitalize()} for r in self.usuarios_roles]
+
+
+def _leer_roles(crudo: str) -> tuple[str, ...]:
+    """`USERS_ROLES=admin,operador,cajero` → `("admin", "operador", "cajero")`.
+
+    Sin la variable (o vacía), `ROLES_POR_DEFECTO`. Formato simple a
+    propósito: sin etiqueta explícita — `roles_para_frontend` deriva la
+    etiqueta del valor, y ningún producto de la familia necesita hoy una
+    distinta.
+    """
+    roles = tuple(r.strip() for r in crudo.split(",") if r.strip())
+    return roles or ROLES_POR_DEFECTO
 
 
 def _leer_features(crudo: str) -> frozenset[str]:
@@ -130,4 +163,5 @@ def cargar_settings(env: dict | None = None) -> Settings:
         health_path=(env.get("HEALTH_PATH") or "/health").strip(),
         service_token=token,
         timeout_instancia=float(env.get("TIMEOUT_INSTANCIA") or 5.0),
+        usuarios_roles=_leer_roles(env.get("USERS_ROLES", "")),
     )

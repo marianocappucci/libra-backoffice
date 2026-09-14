@@ -131,3 +131,107 @@ def test_baja_logica_de_un_usuario(logueado):
         json={"name": "Ana P.", "role": "admin", "active": False},
     )
     assert resp.json()["active"] is False
+
+
+def test_los_modelos_de_usuarios_son_los_de_libraauth_y_no_una_redefinicion():
+    """El punto del ADR-018: no una copia con la misma forma, el MISMO objeto
+    de Python. Si algún día alguien vuelve a redefinir `UsuarioIn`/
+    `UsuarioUpdate` acá adentro, este test lo detecta sin depender de que la
+    redefinición tenga (o no) los mismos campos — que es justo el tipo de
+    divergencia silenciosa que el ADR quiere impedir."""
+    from libraauth.usuarios import UsuarioAlta, UsuarioClaveNueva, UsuarioEdicion
+
+    from libra_backoffice.routers import config_instancia as mod
+
+    assert mod.crear_usuario.__annotations__["datos"] is UsuarioAlta
+    assert mod.editar_usuario.__annotations__["datos"] is UsuarioEdicion
+    assert mod.cambiar_password_usuario.__annotations__["datos"] is UsuarioClaveNueva
+
+
+def test_cuerpo_edicion_omite_email_ausente():
+    """Unitario y sin red: fija la elección de `exclude_none=True` en
+    `_cuerpo_edicion`, independiente de que la instancia de la suite (que ya
+    trata `None` como 'no tocar' en los dos lados) tolere igual la forma
+    completa — ver el comentario de la función."""
+    from libraauth.usuarios import UsuarioEdicion
+
+    from libra_backoffice.routers.config_instancia import _cuerpo_edicion
+
+    assert _cuerpo_edicion(UsuarioEdicion(name="Ana", role="staff", active=True)) == {
+        "name": "Ana", "role": "staff", "active": True,
+    }
+    assert _cuerpo_edicion(
+        UsuarioEdicion(name="Ana", role="staff", active=True, email="")
+    ) == {"name": "Ana", "role": "staff", "active": True, "email": ""}
+
+
+def test_editar_sin_mandar_email_no_lo_borra(logueado):
+    """El toggle activar/desactivar de la grilla de `Usuarios` (libra-ui) manda
+    el PUT sin `email`. Con `UsuarioIn`/`UsuarioUpdate` (sin ese campo) esto no
+    se podía romper porque el campo no existía; con `UsuarioEdicion` sí podría,
+    si el proxy reenviara `email` con el default equivocado — ver el comentario
+    de `editar_usuario`."""
+    uid = logueado.post(
+        "/api/instancias/acme/usuarios", json={**NUEVO, "email": "ana@acme.test"}
+    ).json()["id"]
+
+    resp = logueado.put(
+        f"/api/instancias/acme/usuarios/{uid}",
+        json={"name": "Ana P.", "role": "staff", "active": True},  # sin "email"
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["email"] == "ana@acme.test"
+
+
+def test_editar_con_email_vacio_lo_borra(logueado):
+    """El otro lado de la misma regla: `""` explícito SÍ borra — a diferencia
+    de la ausencia, que la prueba de arriba cubre."""
+    uid = logueado.post(
+        "/api/instancias/acme/usuarios", json={**NUEVO, "email": "ana@acme.test"}
+    ).json()["id"]
+
+    resp = logueado.put(
+        f"/api/instancias/acme/usuarios/{uid}",
+        json={"name": "Ana P.", "role": "staff", "active": True, "email": ""},
+    )
+    assert resp.json()["email"] == ""
+
+
+def test_borrar_usuario_es_204_y_desaparece_del_listado(logueado):
+    uid = logueado.post("/api/instancias/acme/usuarios", json=NUEVO).json()["id"]
+    # Se necesita otro admin activo: `build_users_router` no deja borrar al
+    # único. `ana` es "staff", así que no hace falta ni ese rodeo — pero se dejan
+    # los dos casos por separado igual, para que quede claro cuál guarda cuál.
+    resp = logueado.delete(f"/api/instancias/acme/usuarios/{uid}")
+    assert resp.status_code == 204
+    assert resp.content == b""
+    assert logueado.get("/api/instancias/acme/usuarios").json() == []
+
+
+def test_borrar_el_unico_admin_llega_como_422(logueado):
+    """La guarda es de `build_users_router`, no de este proxy — esto sólo
+    confirma que el proxy no se la come en el camino, y que un 422 de la
+    instancia llega como 422 y no como el 204 que pediría un DELETE que sale
+    bien."""
+    uid = logueado.post(
+        "/api/instancias/acme/usuarios", json={**NUEVO, "role": "admin"}
+    ).json()["id"]
+    resp = logueado.delete(f"/api/instancias/acme/usuarios/{uid}")
+    assert resp.status_code == 422
+
+
+def test_cambiar_password_de_otro_usuario_es_204(logueado):
+    uid = logueado.post("/api/instancias/acme/usuarios", json=NUEVO).json()["id"]
+    resp = logueado.put(
+        f"/api/instancias/acme/usuarios/{uid}/password", json={"password": "otra-clave-larga"}
+    )
+    assert resp.status_code == 204
+    assert resp.content == b""
+
+
+def test_cambiar_password_corta_llega_como_422(logueado):
+    uid = logueado.post("/api/instancias/acme/usuarios", json=NUEVO).json()["id"]
+    resp = logueado.put(
+        f"/api/instancias/acme/usuarios/{uid}/password", json={"password": "corta"}
+    )
+    assert resp.status_code == 422

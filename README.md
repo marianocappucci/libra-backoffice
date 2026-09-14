@@ -44,7 +44,7 @@ y nunca sale a internet.
 |---|---|---|
 | `instancias` | Inventario y ciclo de vida de los contenedores de cliente | host |
 | `smtp` | Correo saliente **de una instancia**, con la contraseña cifrada en reposo | HTTP |
-| `usuarios` | Usuarios **de una instancia**, con baja lógica | HTTP |
+| `usuarios` | Usuarios **de una instancia**: alta, edición, baja lógica, borrado y reset de contraseña ajena | HTTP |
 | `salud` | Versión y arranque del backoffice + qué instancias contestan | ambos |
 
 Se declaran por entorno: `FEATURES=instancias,smtp,usuarios,salud`.
@@ -165,12 +165,20 @@ fail-closed de arriba trata como "roto".
 Casi todo. Lo genuinamente nuevo de este repo es el ensamblado y el proxy.
 
 - **`libraauth`** — `AdminAuth` (sesión del superadmin, credenciales por
-  entorno, cookie propia, rate limiting) y el guard de token de servicio.
+  entorno, cookie propia, rate limiting, renovación deslizante de 8 h sin uso
+  desde v0.43.0/ADR-017 — ver `deps.admin_actual`) y el guard de token de
+  servicio. Desde v0.43.0/ADR-018 también los modelos públicos
+  `UsuarioAlta`/`UsuarioEdicion`/`UsuarioClaveNueva` de `libraauth.usuarios`:
+  el proxy de `config_instancia.py` los importa en vez de redefinirlos —
+  contrato único de usuarios para toda la familia.
 - **`libracore`** — `admin.services` (inventario y ciclo de vida, que a su vez
   envuelve los scripts del repo de cada producto) y `security_headers`.
 - **`libra-ui`** — `Layout`, `Login`, `Usuarios`, `data-table`, `AuthContext`,
   `api-client` y `ConfiguracionSmtp`. Este repo es el **primer consumidor** de
-  la `v0.10.0`.
+  la `v0.10.0`. Desde v0.71.0, `Usuarios` recibe `roles` (`USERS_ROLES`, vía
+  `/api/salud`) y `permitirEliminar` (siempre `true` acá: el proxy de `DELETE`
+  ya existe) — sin `usuarioActualId`, porque el superadmin del backoffice no
+  es un usuario de ninguna instancia.
 
 ## Estructura
 
@@ -208,6 +216,7 @@ cd frontend && npm install && npm run build
 | `LIBRA_SERVICE_TOKEN` | con `smtp`/`usuarios` | El mismo valor que tienen seteado las instancias de este producto. |
 | `SMTP_PATH` | no | Default `/admin/smtp`. Contalibra y Restolibra usan `/api/config/smtp`. |
 | `USERS_PATH` | no | Default `/users`. LibraDesk usa `/api/usuarios`. |
+| `USERS_ROLES` | no | Vocabulario de roles de ESTE producto, separado por comas (ej. `admin,operador,cajero`). Default `staff,admin`. Llega al `Select` de rol de la pantalla de Usuarios vía `/api/salud` (campo `usuarios_roles`) — mismo camino que `features`. Sin etiqueta propia: la muestra es el valor capitalizado (`operador` → «Operador»). Contalibra: `admin,operador,cajero`. Restolibra: `admin,operador,cajero,mozo`. |
 | `INSTANCIA_PUERTO` | no | Puerto interno de las instancias. Default `8000`. |
 | `TIMEOUT_INSTANCIA` | no | Segundos. Default `5`. |
 

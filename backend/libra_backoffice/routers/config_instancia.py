@@ -13,6 +13,7 @@ sin instancia es ambigua, y la ambigüedad acá se paga configurándole el
 servidor de correo al cliente equivocado.
 """
 from fastapi import APIRouter, Depends, HTTPException, Request
+from libraauth.usuarios import UsuarioAlta, UsuarioClaveNueva, UsuarioEdicion
 from pydantic import BaseModel
 
 from ..cliente_instancia import InstanciaInalcanzable, RespuestaDeInstancia
@@ -48,19 +49,6 @@ class SmtpIn(BaseModel):
     password: str | None = None
     from_email: str = ""
     from_name: str = ""
-
-
-class UsuarioIn(BaseModel):
-    username: str
-    name: str
-    password: str
-    role: str = "staff"
-
-
-class UsuarioUpdate(BaseModel):
-    name: str
-    role: str
-    active: bool
 
 
 class DemoCodigoIn(BaseModel):
@@ -113,14 +101,18 @@ async def _proxy_demo(request: Request, slug: str, metodo: str, path: str,
         raise
 
 
-async def _proxy(request: Request, slug: str, metodo: str, path: str, cuerpo=None):
+async def _proxy(
+    request: Request, slug: str, metodo: str, path: str, cuerpo=None, *, esperar_json: bool = True
+):
     try:
         instancia = request.app.state.inventario.obtener(slug)
     except InstanciaDesconocida:
         raise HTTPException(404, f"No hay ninguna instancia '{slug}'.")
 
     try:
-        return await request.app.state.cliente_instancia.pedir(metodo, instancia, path, json=cuerpo)
+        return await request.app.state.cliente_instancia.pedir(
+            metodo, instancia, path, json=cuerpo, esperar_json=esperar_json
+        )
     except InstanciaInalcanzable as exc:
         # 502 y no 500: el backoffice está bien, la instancia no contesta. La
         # pantalla necesita poder decir cuál y por qué.
@@ -135,6 +127,20 @@ def _cuerpo_smtp(datos: SmtpIn) -> dict:
     """Reenvía sólo los campos que vinieron, para no convertir un 'no toqués la
     contraseña' en un 'borrala' en el camino."""
     return datos.model_dump(include=datos.model_fields_set or None)
+
+
+def _cuerpo_edicion(datos: UsuarioEdicion) -> dict:
+    """`exclude_none=True` y no el `model_dump()` completo: `email` es el
+    único campo que puede ser `None`, y `None` es el sentinela de "no lo
+    toqués" tanto acá como del lado de la instancia (ver el docstring de
+    `UsuarioEdicion`) — mandarlo explícito o directamente omitirlo significan
+    lo mismo para quien recibe. Es el mismo criterio que ya usa
+    `libraauth.testing.verificar_contrato_de_usuarios` para armar este mismo
+    PUT. El toggle activar/desactivar de la grilla de `Usuarios` (libra-ui)
+    manda el cuerpo sin `email`: por eso el default tiene que seguir siendo
+    `None` y no `""` — con `""` por default ese toggle borraría el correo de
+    cualquiera en cada click."""
+    return datos.model_dump(exclude_none=True)
 
 
 # ── SMTP ────────────────────────────────────────────────────────────────────
@@ -157,6 +163,14 @@ async def borrar_smtp(slug: str, request: Request):
 
 
 # ── Usuarios ────────────────────────────────────────────────────────────────
+#
+# Los cuerpos son los modelos PÚBLICOS de `libraauth.usuarios`
+# (`UsuarioAlta`/`UsuarioEdicion`/`UsuarioClaveNueva`) y no una redefinición
+# propia — decisión del humano, 2026-09-13 (ADR-018 de libraauth): un solo
+# contrato de usuarios para toda la familia, que este backoffice no pueda
+# volver a hacer divergir. Antes de esto `UsuarioIn`/`UsuarioUpdate` eran una
+# copia con la misma forma, y una copia se desincroniza — por ejemplo, no
+# tenían `email`, así que la edición nunca lo mandaba.
 
 @router_usuarios.get("")
 async def listar_usuarios(slug: str, request: Request):
@@ -164,16 +178,43 @@ async def listar_usuarios(slug: str, request: Request):
 
 
 @router_usuarios.post("", status_code=201)
-async def crear_usuario(slug: str, datos: UsuarioIn, request: Request):
+async def crear_usuario(slug: str, datos: UsuarioAlta, request: Request):
     return await _proxy(
         request, slug, "POST", request.app.state.settings.users_path, datos.model_dump()
     )
 
 
 @router_usuarios.put("/{user_id}")
-async def editar_usuario(slug: str, user_id: str, datos: UsuarioUpdate, request: Request):
+async def editar_usuario(slug: str, user_id: str, datos: UsuarioEdicion, request: Request):
     path = f"{request.app.state.settings.users_path}/{user_id}"
-    return await _proxy(request, slug, "PUT", path, datos.model_dump())
+    return await _proxy(request, slug, "PUT", path, _cuerpo_edicion(datos))
+
+
+@router_usuarios.put("/{user_id}/password", status_code=204)
+async def cambiar_password_usuario(
+    slug: str, user_id: str, datos: UsuarioClaveNueva, request: Request
+):
+    """Resetea la contraseña de OTRO usuario. `204` sin cuerpo, igual que la
+    instancia (`libraauth.usuarios.build_users_router`) — de ahí
+    `esperar_json=False`: un `resp.json()` sobre un `204` vacío se leería como
+    'la instancia devolvió un cuerpo que no es JSON', el mismo error que el
+    fallback de la SPA, y confundiría un reset que salió bien con una ruta mal
+    configurada."""
+    path = f"{request.app.state.settings.users_path}/{user_id}/password"
+    await _proxy(request, slug, "PUT", path, datos.model_dump(), esperar_json=False)
+
+
+@router_usuarios.delete("/{user_id}", status_code=204)
+async def eliminar_usuario(slug: str, user_id: str, request: Request):
+    """`204` sin cuerpo — mismo motivo que `cambiar_password_usuario` arriba.
+
+    Esto es DISTINTO de `POST /instancias/{slug}/baja` (dar de baja una
+    instancia entera): acá se borra un usuario DENTRO de una instancia, con
+    las guardas del único admin que ya trae `build_users_router` — no hace
+    falta reproducirlas acá, el backoffice sólo reenvía.
+    """
+    path = f"{request.app.state.settings.users_path}/{user_id}"
+    await _proxy(request, slug, "DELETE", path, esperar_json=False)
 
 
 # ── Códigos de acceso a la demo ─────────────────────────────────────────────

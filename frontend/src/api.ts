@@ -120,9 +120,17 @@ export type TotpIniciado = {
   qr: string
 }
 
+// Un rol seleccionable en el `Select` de la pantalla de Usuarios (`Usuarios`
+// de libra-ui, prop `roles`). Misma forma que su tipo `Rol`.
+export type RolUsuario = { value: string; label: string }
+
 export type Salud = {
   producto: { slug: string; nombre: string }
   features: string[]
+  // El vocabulario de roles DE ESTE PRODUCTO (`USERS_ROLES` del backend) —
+  // mismo camino que `features`: settings → `/api/salud` → frontend. Ver
+  // `rutaUsuarios` más abajo y `Instancia.tsx`.
+  usuarios_roles: RolUsuario[]
   backoffice: {
     version: string
     commit: string
