@@ -30,7 +30,7 @@ dependencies = [
     # `check_credentials` (un codigo usado en un camino no sirve en el otro).
     # `check_credentials` sigue igual, para el camino de un solo paso. Ver
     # ADR-016 de libraauth y `routers/auth.py`.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.42.0",
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.43.1",
     # `admin.services` (inventario y ciclo de vida de instancias) y
     # `security_headers`. v1.3.0: el alta ya no elige un puerto que otro
     # producto del host tiene bindeado, y hace rollback del directorio si el
