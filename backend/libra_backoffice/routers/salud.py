@@ -91,6 +91,10 @@ async def salud(request: Request):
     return {
         "producto": {"slug": settings.product_slug, "nombre": settings.product_name},
         "features": sorted(settings.features),
+        # Mismo camino que `features`: settings → `/api/salud` → frontend. Es
+        # lo que usa `Instancia.tsx` para la prop `roles` de `Usuarios`
+        # (libra-ui) — ver `Settings.usuarios_roles`/`USERS_ROLES`.
+        "usuarios_roles": settings.roles_para_frontend,
         "backoffice": {
             "version": os.environ.get("APP_VERSION", "desconocida"),
             "commit": os.environ.get("APP_COMMIT", "desconocido"),

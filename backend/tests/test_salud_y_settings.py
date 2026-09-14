@@ -16,6 +16,44 @@ def test_salud_reporta_arranque_y_features(logueado):
     assert cuerpo["backoffice"]["uptime_segundos"] >= 0
 
 
+def test_salud_reporta_los_roles_de_usuarios_por_defecto(logueado):
+    """Mismo camino que `features`: settings → `/api/salud` → frontend. Es lo
+    que usa `Instancia.tsx` para la prop `roles` de `Usuarios` (libra-ui)."""
+    cuerpo = logueado.get("/api/salud").json()
+    assert cuerpo["usuarios_roles"] == [
+        {"value": "staff", "label": "Staff"},
+        {"value": "admin", "label": "Admin"},
+    ]
+
+
+def test_salud_reporta_los_roles_de_usuarios_configurados(tmp_path, instancias_falsas, inventario):
+    """Contalibra/Restolibra: vocabulario de roles distinto al de los otros
+    cuatro FastAPI — ver `Settings.usuarios_roles`."""
+    from libra_backoffice.cliente_instancia import ClienteInstancia
+
+    from .conftest import _TransporteDeInstancias
+
+    app = create_app(
+        construir_settings(
+            tmp_path, product_slug="restolibra", product_name="Restolibra",
+            usuarios_roles=("admin", "operador", "cajero", "mozo"),
+        ),
+        inventario=inventario,
+    )
+    app.state.cliente_instancia = ClienteInstancia(
+        token=TOKEN, transport=_TransporteDeInstancias(instancias_falsas)
+    )
+    c = TestClient(app, base_url="https://testserver")
+    login(c, {"username": USUARIO, "password": PASSWORD})
+
+    assert c.get("/api/salud").json()["usuarios_roles"] == [
+        {"value": "admin", "label": "Admin"},
+        {"value": "operador", "label": "Operador"},
+        {"value": "cajero", "label": "Cajero"},
+        {"value": "mozo", "label": "Mozo"},
+    ]
+
+
 def test_salud_distingue_instancia_viva_de_caida(logueado):
     """Una instancia caída es información, no una falla del backoffice — y es
     justo el momento en que alguien va a abrir esta pantalla."""
@@ -193,6 +231,22 @@ def test_settings_completo():
     assert s.smtp_path == "/admin/smtp"
     assert s.health_path == "/health"
     assert s.features_por_instancia == ["smtp", "usuarios"]
+
+
+def test_users_roles_default_staff_admin():
+    """Sin `USERS_ROLES`, el mismo vocabulario que ya tenía el `Select` de rol
+    de `Usuarios` (libra-ui) antes de la prop `roles` — un producto que no
+    setee la variable no ve ningún cambio."""
+    s = cargar_settings(BASE)
+    assert s.usuarios_roles == ("staff", "admin")
+    assert s.roles_para_frontend == [
+        {"value": "staff", "label": "Staff"}, {"value": "admin", "label": "Admin"},
+    ]
+
+
+def test_users_roles_configurable():
+    s = cargar_settings({**BASE, "USERS_ROLES": "admin, operador , cajero"})
+    assert s.usuarios_roles == ("admin", "operador", "cajero")
 
 
 def test_health_path_configurable():

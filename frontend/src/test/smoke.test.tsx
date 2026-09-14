@@ -91,6 +91,7 @@ function conSesion(rutas: Record<string, (init: Init) => Promise<Response>> = {}
       return Promise.resolve(json({
         producto: { slug: 'demolibra', nombre: 'DemoLibra' },
         features: ['instancias', 'smtp'],
+        usuarios_roles: [{ value: 'staff', label: 'Staff' }, { value: 'admin', label: 'Admin' }],
         backoffice: { version: 'x', commit: 'y', arrancado: '', uptime_segundos: 61 },
         instancias: [{ slug: 'acme', nombre: 'ACME SA', container: 'c', estado: 'ok', detalle: '' }],
       }))

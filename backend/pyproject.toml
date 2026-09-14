@@ -30,7 +30,17 @@ dependencies = [
     # `check_credentials` (un codigo usado en un camino no sirve en el otro).
     # `check_credentials` sigue igual, para el camino de un solo paso. Ver
     # ADR-016 de libraauth y `routers/auth.py`.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.42.0",
+    #
+    # v0.43.0 (2026-09-13): sesion de 8 h sin uso con renovacion deslizante
+    # (ADR-017) tambien para `AdminAuth` -- `deps.admin_actual` ahora le pasa
+    # `response` a `current_user` para heredarla (ver su docstring: sin el
+    # parametro, la sesion del superadmin vencia a las 8 h en punto, la haya
+    # usado o no en el medio). Y `libraauth.usuarios` (ADR-018): los modelos
+    # publicos `UsuarioAlta`/`UsuarioEdicion`/`UsuarioClaveNueva` que
+    # `routers/config_instancia.py` importa en vez de redefinir -- contrato
+    # unico de usuarios de la familia, que este backoffice ya no puede volver
+    # a hacer divergir.
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.43.0",
     # `admin.services` (inventario y ciclo de vida de instancias) y
     # `security_headers`. v1.3.0: el alta ya no elige un puerto que otro
     # producto del host tiene bindeado, y hace rollback del directorio si el
