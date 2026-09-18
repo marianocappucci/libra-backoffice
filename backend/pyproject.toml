@@ -40,7 +40,7 @@ dependencies = [
     # `routers/config_instancia.py` importa en vez de redefinir -- contrato
     # unico de usuarios de la familia, que este backoffice ya no puede volver
     # a hacer divergir.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.43.0",
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.46.0",
     # `admin.services` (inventario y ciclo de vida de instancias) y
     # `security_headers`. v1.3.0: el alta ya no elige un puerto que otro
     # producto del host tiene bindeado, y hace rollback del directorio si el
