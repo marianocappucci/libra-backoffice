@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 FEATURES_VALIDAS = frozenset(
-    {"instancias", "smtp", "usuarios", "salud", "demos"}
+    {"instancias", "smtp", "usuarios", "salud", "demos", "reenvio-correo"}
 )
 
 #: Mismo vocabulario que ya tenía el `Select` de rol de `Usuarios` de
@@ -56,6 +56,10 @@ class Settings:
     # recibe un 404 de la instancia — que es la respuesta correcta y la que la
     # pantalla traduce a "esta instancia no es una demo".
     demo_codigos_path: str = "/admin/demo-codigos"
+    # El "correo de reenvío" que el cliente carga en SU panel (piloto:
+    # Contalibra, endpoint propio del producto — no es de libraauth, igual que
+    # `users_path`).
+    reenvio_correo_path: str = "/api/config/reenvio-correo"
     service_token: str = ""
     timeout_instancia: float = 5.0
     # Vocabulario de roles de ESTE producto — no es el mismo en toda la
@@ -74,7 +78,10 @@ class Settings:
     @property
     def features_por_instancia(self) -> list[str]:
         """Las que se resuelven hablándole a una instancia, no al host."""
-        return [f for f in ("smtp", "usuarios", "demos") if f in self.features]
+        return [
+            f for f in ("smtp", "usuarios", "demos", "reenvio-correo")
+            if f in self.features
+        ]
 
     @property
     def roles_para_frontend(self) -> list[dict]:
@@ -142,7 +149,7 @@ def cargar_settings(env: dict | None = None) -> Settings:
         )
 
     token = (env.get("LIBRA_SERVICE_TOKEN") or "").strip()
-    if features & {"smtp", "usuarios", "demos"} and not token:
+    if features & {"smtp", "usuarios", "demos", "reenvio-correo"} and not token:
         raise ConfiguracionInvalida(
             "Las features 'smtp' y 'usuarios' se resuelven hablándole a la API de cada "
             "instancia y necesitan LIBRA_SERVICE_TOKEN — el mismo valor que tienen "
@@ -159,6 +166,8 @@ def cargar_settings(env: dict | None = None) -> Settings:
         smtp_path=(env.get("SMTP_PATH") or "/admin/smtp").strip(),
         demo_codigos_path=(
             env.get("DEMO_CODIGOS_PATH") or "/admin/demo-codigos").strip(),
+        reenvio_correo_path=(
+            env.get("REENVIO_CORREO_PATH") or "/api/config/reenvio-correo").strip(),
         users_path=(env.get("USERS_PATH") or "/users").strip(),
         health_path=(env.get("HEALTH_PATH") or "/health").strip(),
         service_token=token,

@@ -30,6 +30,7 @@ import { EditarInstancia } from '../components/EditarInstancia'
 import { EstadoServicio } from '../components/EstadoServicio'
 import { Pestanas } from '../components/Pestanas'
 import { CodigosDemo } from '../components/CodigosDemo'
+import { ReenvioCorreo } from '../components/ReenvioCorreo'
 import {
   ApiError, backoffice, rutaCodigosDemo, rutaSmtp, rutaUsuarios,
   type Instancia as TInstancia, type Plan, type RolUsuario,
@@ -321,7 +322,16 @@ export function Instancia() {
             clave: 'correo',
             label: 'Correo',
             icono: Mail,
-            contenido: <ConfiguracionSmtp basePath={rutaSmtp(slug)} />,
+            contenido: (
+              <div className="space-y-6">
+                <ConfiguracionSmtp basePath={rutaSmtp(slug)} />
+                {/* Piloto Contalibra: en un producto sin la feature habilitada,
+                    el backoffice devuelve 404 y esta tarjeta lo muestra como
+                    cualquier otro error — mismo criterio que Usuarios y Demo,
+                    que tampoco se ocultan por producto en el frontend. */}
+                <ReenvioCorreo slug={slug} />
+              </div>
+            ),
           },
           {
             clave: 'usuarios',

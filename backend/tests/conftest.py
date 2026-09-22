@@ -14,8 +14,9 @@ from dataclasses import replace
 import httpx
 import pytest
 from altcha import Challenge, Payload, solve_challenge
-from fastapi import FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.testclient import TestClient
+from pydantic import BaseModel
 from libraauth.captcha import Captcha
 from libraauth.demo_codigos import DemoCodigoRepository
 from libraauth.models import Base as AuthBase
@@ -77,6 +78,10 @@ def entorno(monkeypatch):
 
 # ── La "instancia" ──────────────────────────────────────────────────────────
 
+class _ReenvioCorreoIn(BaseModel):
+    destino: str | None = None
+
+
 def construir_instancia_falsa(db_path, *, es_demo=False, roles=("staff", "admin")):
     """Una instancia de producto: los routers de `libraauth` (SMTP, demo y
     ahora usuarios).
@@ -104,6 +109,10 @@ def construir_instancia_falsa(db_path, *, es_demo=False, roles=("staff", "admin"
     app.state.smtp_settings = SmtpSettingsRepository(sesiones)
     app.state.users = UserRepository(sesiones, roles=roles)
     app.state.session_auth = None  # nadie con cookie: sólo se entra por token
+    # El "correo de reenvío" cargado por el cliente en SU panel. Contalibra
+    # todavía, así que acá no hay repositorio: alcanza con guardarlo en memoria
+    # del proceso de la instancia falsa.
+    app.state.reenvio_correo = None
 
     @app.get("/health")
     def health():
@@ -117,6 +126,25 @@ def construir_instancia_falsa(db_path, *, es_demo=False, roles=("staff", "admin"
     app.include_router(
         build_users_router(roles=roles, admin_guard=json_api_require_admin_o_servicio)
     )
+
+    # No es de libraauth: es el endpoint que está construyendo Contalibra en
+    # paralelo (`GET/PUT /api/config/reenvio-correo`). Este doble reproduce su
+    # contrato: `GET` -> `{"destino": ... | null}`, `PUT` lo reemplaza.
+    reenvio_correo = APIRouter(
+        prefix="/api/config/reenvio-correo",
+        dependencies=[Depends(json_api_require_admin_o_servicio)],
+    )
+
+    @reenvio_correo.get("")
+    def leer_reenvio_correo():
+        return {"destino": app.state.reenvio_correo}
+
+    @reenvio_correo.put("")
+    def guardar_reenvio_correo(datos: _ReenvioCorreoIn):
+        app.state.reenvio_correo = datos.destino
+        return {"destino": app.state.reenvio_correo}
+
+    app.include_router(reenvio_correo)
     return app
 
 
@@ -186,7 +214,11 @@ class _TransporteDeInstancias(httpx.AsyncBaseTransport):
 
 # ── El backoffice ───────────────────────────────────────────────────────────
 
-def construir_settings(tmp_path, features=("instancias", "smtp", "usuarios", "salud", "demos"), **extra):
+def construir_settings(
+    tmp_path,
+    features=("instancias", "smtp", "usuarios", "salud", "demos", "reenvio-correo"),
+    **extra,
+):
     base = dict(
         product_slug="gestiolibra", product_name="Gestiolibra",
         features=frozenset(features), repo_root=tmp_path,
