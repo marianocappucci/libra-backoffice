@@ -235,3 +235,120 @@ def test_cambiar_password_corta_llega_como_422(logueado):
         f"/api/instancias/acme/usuarios/{uid}/password", json={"password": "corta"}
     )
     assert resp.status_code == 422
+
+
+# ── Correo de reenvío ───────────────────────────────────────────────────────
+#
+# `GET/PUT /api/config/reenvio-correo` de la instancia lo reproduce la
+# instancia falsa de `conftest.py`; `libracore.provisioning.mail_cuentas`
+# —que el pin instalado localmente todavía no trae— se instala como módulo
+# falso vía `sys.modules`, el mismo mecanismo que usa el import diferido del
+# router para no tumbar el arranque del backoffice con un pin viejo.
+
+import sys
+import types
+
+
+def _instalar_mail_cuentas_falso(monkeypatch, *, configurado=True, error=None):
+    modulo = types.ModuleType("libracore.provisioning.mail_cuentas")
+    llamadas = []
+
+    class MailError(Exception):
+        pass
+
+    def _agregar_reenvio(slug, destino):
+        llamadas.append(("agregar", slug, destino))
+        if error:
+            raise MailError(error)
+
+    def _quitar_reenvio(slug):
+        llamadas.append(("quitar", slug))
+
+    modulo.MailError = MailError
+    modulo.configurado = lambda: configurado
+    modulo.agregar_reenvio = _agregar_reenvio
+    modulo.quitar_reenvio = _quitar_reenvio
+
+    monkeypatch.setitem(sys.modules, "libracore.provisioning.mail_cuentas", modulo)
+    return llamadas
+
+
+def test_reenvio_correo_pide_sesion_del_superadmin(cliente):
+    assert cliente.get("/api/instancias/acme/reenvio-correo").status_code == 401
+    assert cliente.post("/api/instancias/acme/reenvio-correo/aplicar").status_code == 401
+
+
+def test_leer_reenvio_correo_sin_cargar(logueado):
+    assert logueado.get("/api/instancias/acme/reenvio-correo").json() == {"destino": None}
+
+
+def test_leer_reenvio_correo_refleja_lo_que_cargo_el_cliente(logueado):
+    """El backoffice no lo escribe: sólo lo lee. Simula la carga del cliente
+    escribiendo directo contra la API de SU instancia, como haría su panel."""
+    logueado.put("/api/instancias/acme/reenvio-correo", json={"destino": "avisos@acme.com"})
+    assert logueado.get("/api/instancias/acme/reenvio-correo").json() == {
+        "destino": "avisos@acme.com"
+    }
+
+
+def test_aplicar_sin_destino_cargado_quita_cualquier_reenvio_previo(logueado, monkeypatch):
+    # El cliente pudo haber tenido un reenvío y después limpiar el campo: para
+    # cuando esto corre, el valor viejo ya no está en ningún lado (la
+    # instancia lo pisó por null), así que "aplicar" tiene que sacar lo que
+    # haya del lado del servidor de correo, no asumir que no hay nada que
+    # hacer. `quitar_reenvio` es un no-op seguro si no había nada.
+    llamadas = _instalar_mail_cuentas_falso(monkeypatch)
+    resp = logueado.post("/api/instancias/acme/reenvio-correo/aplicar")
+    assert resp.status_code == 200
+    assert resp.json() == {"aplicado": False, "destino": None}
+    assert llamadas == [("quitar", "acme")]
+
+
+def test_aplicar_con_destino_llama_a_mail_cuentas(logueado, monkeypatch):
+    llamadas = _instalar_mail_cuentas_falso(monkeypatch)
+    logueado.put("/api/instancias/acme/reenvio-correo", json={"destino": "avisos@acme.com"})
+
+    resp = logueado.post("/api/instancias/acme/reenvio-correo/aplicar")
+    assert resp.status_code == 200
+    assert resp.json() == {"aplicado": True, "destino": "avisos@acme.com"}
+    assert llamadas == [("agregar", "acme", "avisos@acme.com")]
+
+
+def test_aplicar_repite_el_get_y_no_confia_en_lo_que_manda_el_backoffice(logueado, monkeypatch):
+    """No hay body en el POST: el destino sale SIEMPRE del `GET` a la instancia."""
+    llamadas = _instalar_mail_cuentas_falso(monkeypatch)
+    logueado.put("/api/instancias/acme/reenvio-correo", json={"destino": "real@acme.com"})
+
+    resp = logueado.post(
+        "/api/instancias/acme/reenvio-correo/aplicar", json={"destino": "otro@evil.com"}
+    )
+    assert resp.json()["destino"] == "real@acme.com"
+    assert llamadas == [("agregar", "acme", "real@acme.com")]
+
+
+def test_aplicar_sin_servidor_de_correo_configurado_es_409(logueado, monkeypatch):
+    llamadas = _instalar_mail_cuentas_falso(monkeypatch, configurado=False)
+    logueado.put("/api/instancias/acme/reenvio-correo", json={"destino": "avisos@acme.com"})
+
+    resp = logueado.post("/api/instancias/acme/reenvio-correo/aplicar")
+    assert resp.status_code == 409
+    assert "no está configurado" in resp.json()["detail"]
+    assert llamadas == []
+
+
+def test_aplicar_con_error_del_servidor_de_correo_es_502(logueado, monkeypatch):
+    _instalar_mail_cuentas_falso(monkeypatch, error="el host no contestó al comando")
+    logueado.put("/api/instancias/acme/reenvio-correo", json={"destino": "avisos@acme.com"})
+
+    resp = logueado.post("/api/instancias/acme/reenvio-correo/aplicar")
+    assert resp.status_code == 502
+    assert "el host no contestó al comando" in resp.json()["detail"]
+
+
+def test_aplicar_sin_libracore_actualizado_es_503(logueado, monkeypatch):
+    """Sin el módulo instalado (pin viejo), no hay forma de aplicar nada."""
+    monkeypatch.delitem(sys.modules, "libracore.provisioning.mail_cuentas", raising=False)
+    logueado.put("/api/instancias/acme/reenvio-correo", json={"destino": "avisos@acme.com"})
+
+    resp = logueado.post("/api/instancias/acme/reenvio-correo/aplicar")
+    assert resp.status_code == 503

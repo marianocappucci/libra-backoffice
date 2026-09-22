@@ -124,6 +124,20 @@ export type TotpIniciado = {
 // de libra-ui, prop `roles`). Misma forma que su tipo `Rol`.
 export type RolUsuario = { value: string; label: string }
 
+// El correo de reenvío que el cliente carga en SU propio panel (piloto:
+// Contalibra). El backoffice no lo edita: sólo lo lee y, con un click de un
+// humano administrativo, lo aplica de verdad en el servidor de correo.
+export type ReenvioCorreo = {
+  destino: string | null
+}
+
+export type AplicarReenvioCorreo = {
+  // `false` no es "no se hizo nada": es que no hay destino cargado, y el
+  // backend igual sacó cualquier reenvío previo del servidor de correo.
+  aplicado: boolean
+  destino?: string | null
+}
+
 export type Salud = {
   producto: { slug: string; nombre: string }
   features: string[]
@@ -186,6 +200,11 @@ export const backoffice = {
   // comentario del router.
   baja: (slug: string, datos: { confirmar_slug: string; hacer_backup: boolean }) =>
     api.post<Baja>(`/api/instancias/${slug}/baja`, datos),
+
+  reenvioCorreo: (slug: string) =>
+    api.get<ReenvioCorreo>(`/api/instancias/${slug}/reenvio-correo`),
+  aplicarReenvioCorreo: (slug: string) =>
+    api.post<AplicarReenvioCorreo>(`/api/instancias/${slug}/reenvio-correo/aplicar`),
 }
 
 // Rutas que consumen los componentes de libra-ui vía su prop `basePath`.
