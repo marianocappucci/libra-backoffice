@@ -32,7 +32,9 @@ def test_me_sin_sesion_devuelve_401_y_no_un_redirect(cliente):
 def test_me_con_sesion(logueado):
     resp = logueado.get("/api/me")
     assert resp.status_code == 200
-    assert resp.json() == {"username": USUARIO}
+    assert resp.json()["username"] == USUARIO
+    # Las features del producto, para que la barra lateral muestre sólo las pantallas que existen.
+    assert "apariencia" in resp.json()["features"]
 
 
 def test_logout_corta_la_sesion(logueado):

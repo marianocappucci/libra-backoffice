@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 FEATURES_VALIDAS = frozenset(
-    {"instancias", "smtp", "usuarios", "salud", "demos", "reenvio-correo"}
+    {"instancias", "smtp", "usuarios", "salud", "demos", "reenvio-correo", "apariencia"}
 )
 
 #: Mismo vocabulario que ya tenía el `Select` de rol de `Usuarios` de
@@ -60,6 +60,10 @@ class Settings:
     # Contalibra, endpoint propio del producto — no es de libraauth, igual que
     # `users_path`).
     reenvio_correo_path: str = "/api/config/reenvio-correo"
+    # El tema de la suite (feature `apariencia`, ADR-007 de libra-ui): dónde guarda el backoffice los colores de la suite y en qué ruta
+    # de cada instancia los publica (`libracore.tema_router`, ADR-012; es la misma en los seis productos).
+    tema_path: Path = Path("/var/lib/libra-backoffice/tema.json")
+    tema_instancia_path: str = "/api/tema"
     service_token: str = ""
     timeout_instancia: float = 5.0
     # Vocabulario de roles de ESTE producto — no es el mismo en toda la
@@ -79,7 +83,7 @@ class Settings:
     def features_por_instancia(self) -> list[str]:
         """Las que se resuelven hablándole a una instancia, no al host."""
         return [
-            f for f in ("smtp", "usuarios", "demos", "reenvio-correo")
+            f for f in ("smtp", "usuarios", "demos", "reenvio-correo", "apariencia")
             if f in self.features
         ]
 
@@ -118,6 +122,18 @@ def _leer_features(crudo: str) -> frozenset[str]:
     return frozenset(features)
 
 
+def _ruta_del_tema(env: dict) -> Path:
+    """`TEMA_PATH` si está; si no, junto al archivo de estado del login (`ADMIN_PANEL_ESTADO_PATH`), que ya vive en el volumen persistente;
+    si tampoco, el volumen por defecto del compose."""
+    explicita = (env.get("TEMA_PATH") or "").strip()
+    if explicita:
+        return Path(explicita)
+    estado = (env.get("ADMIN_PANEL_ESTADO_PATH") or "").strip()
+    if estado:
+        return Path(estado).parent / "tema.json"
+    return Path("/var/lib/libra-backoffice/tema.json")
+
+
 def cargar_settings(env: dict | None = None) -> Settings:
     """Arma los settings desde el entorno y **falla al arrancar** si falta algo.
 
@@ -149,7 +165,7 @@ def cargar_settings(env: dict | None = None) -> Settings:
         )
 
     token = (env.get("LIBRA_SERVICE_TOKEN") or "").strip()
-    if features & {"smtp", "usuarios", "demos", "reenvio-correo"} and not token:
+    if features & {"smtp", "usuarios", "demos", "reenvio-correo", "apariencia"} and not token:
         raise ConfiguracionInvalida(
             "Las features 'smtp' y 'usuarios' se resuelven hablándole a la API de cada "
             "instancia y necesitan LIBRA_SERVICE_TOKEN — el mismo valor que tienen "
@@ -170,6 +186,8 @@ def cargar_settings(env: dict | None = None) -> Settings:
             env.get("REENVIO_CORREO_PATH") or "/api/config/reenvio-correo").strip(),
         users_path=(env.get("USERS_PATH") or "/users").strip(),
         health_path=(env.get("HEALTH_PATH") or "/health").strip(),
+        tema_path=_ruta_del_tema(env),
+        tema_instancia_path=(env.get("TEMA_INSTANCIA_PATH") or "/api/tema").strip(),
         service_token=token,
         timeout_instancia=float(env.get("TIMEOUT_INSTANCIA") or 5.0),
         usuarios_roles=_leer_roles(env.get("USERS_ROLES", "")),

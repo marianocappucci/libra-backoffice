@@ -96,6 +96,13 @@ class UsuarioOut(BaseModel):
     username: str
 
 
+class MeOut(UsuarioOut):
+    """`GET /api/me`: además del usuario, las features de este producto (la barra lateral muestra sólo las pantallas que existen, p. ej.
+    «Apariencia»). Aparte de `UsuarioOut` a propósito: el login contesta con ése y no tiene por qué cambiar."""
+
+    features: list[str] = []
+
+
 class RequiereCodigoOut(BaseModel):
     """La respuesta del paso 1 cuando hay segundo factor: `200` sin cookie,
     con el desafío que el paso 2 necesita."""
@@ -196,6 +203,6 @@ def logout(request: Request, response: Response):
     return {"ok": True}
 
 
-@router.get("/me", response_model=UsuarioOut)
-def me(username: str = Depends(admin_actual)):
-    return {"username": username}
+@router.get("/me", response_model=MeOut)
+def me(request: Request, username: str = Depends(admin_actual)):
+    return {"username": username, "features": sorted(request.app.state.settings.features)}
