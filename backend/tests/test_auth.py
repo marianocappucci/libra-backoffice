@@ -10,7 +10,8 @@ def test_health_no_pide_auth(cliente):
 def test_login_con_credenciales_correctas(cliente):
     resp = login(cliente, {"username": USUARIO, "password": PASSWORD})
     assert resp.status_code == 200
-    assert resp.json() == {"username": USUARIO}
+    assert resp.json()["username"] == USUARIO
+    assert "apariencia" in resp.json()["features"]
 
 
 def test_login_con_password_incorrecta(cliente):

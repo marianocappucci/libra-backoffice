@@ -105,7 +105,8 @@ def con_totp(request):
 def test_sin_segundo_factor_el_paso_1_loguea_como_siempre(cliente):
     resp = login(cliente, {"username": USUARIO, "password": PASSWORD})
     assert resp.status_code == 200
-    assert resp.json() == {"username": USUARIO}
+    assert resp.json()["username"] == USUARIO
+    assert "apariencia" in resp.json()["features"]
     assert "set-cookie" in resp.headers
     assert cliente.get("/api/me").status_code == 200
 
@@ -143,7 +144,8 @@ def test_paso_2_con_codigo_correcto_loguea(con_totp):
     desafio = login(cliente, {"username": USUARIO, "password": PASSWORD}).json()["desafio"]
     resp = cliente.post("/api/login/codigo", json={"desafio": desafio, "codigo": codigo_disponible})
     assert resp.status_code == 200
-    assert resp.json() == {"username": USUARIO}
+    assert resp.json()["username"] == USUARIO
+    assert "apariencia" in resp.json()["features"]
     assert "set-cookie" in resp.headers
     assert resp.headers["cache-control"] == "no-store"
     assert cliente.get("/api/me").status_code == 200
@@ -234,7 +236,8 @@ def test_el_camino_de_un_paso_con_codigo_sigue_andando(con_totp):
     cliente, _secreto, codigo_disponible = con_totp
     resp = login(cliente, {"username": USUARIO, "password": PASSWORD, "codigo": codigo_disponible})
     assert resp.status_code == 200
-    assert resp.json() == {"username": USUARIO}
+    assert resp.json()["username"] == USUARIO
+    assert "apariencia" in resp.json()["features"]
     assert "set-cookie" in resp.headers
     assert cliente.get("/api/me").status_code == 200
 
