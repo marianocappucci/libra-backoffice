@@ -54,7 +54,7 @@ def test_sesion_usada_cada_hora_durante_10h_sigue_viva(cliente, reloj):
         reloj.avanzar(3600)
         r = cliente.get("/api/me")
         assert r.status_code == 200, r.text
-    assert r.json() == {"username": USUARIO}
+    assert r.json()["username"] == USUARIO
 
 
 def test_sesion_sin_uso_8h_mas_1s_se_rechaza(cliente, reloj):

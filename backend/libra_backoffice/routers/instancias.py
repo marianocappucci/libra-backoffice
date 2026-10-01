@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from ..deps import admin_actual, requiere_feature
 from ..inventario import InstanciaDesconocida
+from . import apariencia
 
 router = APIRouter(
     prefix="/api",
@@ -151,7 +152,10 @@ def detalle(slug: str, request: Request):
 def crear(datos: InstanciaIn, request: Request):
     servicios = _servicios(request)
     try:
-        return servicios.crear_cliente(**datos.model_dump())
+        creada = servicios.crear_cliente(**datos.model_dump())
+        # El tema de la suite (feature `apariencia`) llega a la instancia nueva. Mejor esfuerzo: nunca hace fallar el alta.
+        apariencia.empujar_a_una_instancia_nueva(request, creada.get("slug", ""))
+        return creada
     # 🔴 409 y no 422: la instancia SÍ se creó, sólo que no quedó entregable
     # (su base no subió, o no se pudo aplicar el plan). El frontend lee un 422
     # como "el motor rechazó el alta, no se creó nada" y deja el formulario

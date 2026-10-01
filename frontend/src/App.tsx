@@ -4,6 +4,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './auth'
 import { Layout } from './components/Layout'
 import { Login } from './pages/Login'
+import { Apariencia } from './pages/Apariencia'
 import { Instancia } from './pages/Instancia'
 import { Instancias } from './pages/Instancias'
 import { Salud } from './pages/Salud'
@@ -49,6 +50,14 @@ export default function App() {
         element={
           <RutaProtegida>
             <Salud />
+          </RutaProtegida>
+        }
+      />
+      <Route
+        path="/apariencia"
+        element={
+          <RutaProtegida>
+            <Apariencia />
           </RutaProtegida>
         }
       />

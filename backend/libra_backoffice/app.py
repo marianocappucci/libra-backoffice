@@ -32,8 +32,9 @@ from libracore.security_headers import CSP_SPA, SecurityHeadersMiddleware
 
 from .cliente_instancia import ClienteInstancia
 from .inventario import construir_inventario
-from .routers import auth, config_instancia, instancias, salud, seguridad
+from .routers import apariencia, auth, config_instancia, instancias, salud, seguridad
 from .settings import Settings, cargar_settings
+from .tema_suite import AlmacenDeTema
 
 # Fallback de desarrollo para el `SECRET_KEY` de la cookie. `_resolve_secret_key`
 # de libraauth sólo lo acepta con `ENV=development`, así que un despliegue real
@@ -67,6 +68,8 @@ def create_app(
     # `SECRET_KEY` que la cookie, por HKDF y con un `info` propio.
     app.state.captcha = Captcha(app.state.admin_auth.secret_key)
     app.state.inventario = inventario if inventario is not None else construir_inventario(settings)
+    # El tema de la suite (feature `apariencia`): la fuente de verdad vive acá y se empuja a las instancias.
+    app.state.almacen_tema = AlmacenDeTema(settings.tema_path)
     app.state.cliente_instancia = ClienteInstancia(
         token=settings.service_token,
         puerto=settings.instancia_puerto,
@@ -114,6 +117,8 @@ def create_app(
     app.include_router(config_instancia.router_smtp)
     app.include_router(config_instancia.router_usuarios)
     app.include_router(config_instancia.router_demos)
+    app.include_router(config_instancia.router_reenvio_correo)
+    app.include_router(apariencia.router)
     app.include_router(salud.router)
 
     _montar_frontend(app, frontend_dist)

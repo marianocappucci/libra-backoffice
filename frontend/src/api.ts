@@ -13,6 +13,8 @@ import { api } from 'libra-ui/api-client'
 // `role` ni `id`.
 export type Superadmin = {
   username: string
+  // Las features de este producto (`/api/me`): la barra lateral muestra sólo las pantallas que existen. Ausente en un backend viejo.
+  features?: string[]
 }
 
 export type ServicioEstado = 'activo' | 'pausado' | 'suspendido'
@@ -124,6 +126,20 @@ export type TotpIniciado = {
 // de libra-ui, prop `roles`). Misma forma que su tipo `Rol`.
 export type RolUsuario = { value: string; label: string }
 
+// El correo de reenvío que el cliente carga en SU propio panel (piloto:
+// Contalibra). El backoffice no lo edita: sólo lo lee y, con un click de un
+// humano administrativo, lo aplica de verdad en el servidor de correo.
+export type ReenvioCorreo = {
+  destino: string | null
+}
+
+export type AplicarReenvioCorreo = {
+  // `false` no es "no se hizo nada": es que no hay destino cargado, y el
+  // backend igual sacó cualquier reenvío previo del servidor de correo.
+  aplicado: boolean
+  destino?: string | null
+}
+
 export type Salud = {
   producto: { slug: string; nombre: string }
   features: string[]
@@ -140,7 +156,29 @@ export type Salud = {
   instancias: EstadoInstancia[]
 }
 
+// El tema de la suite (`libra-ui/tema`, ADR-007): los colores que el superadmin elige y el backoffice empuja a todas las instancias.
+// `Tema` es parcial: lo que falta usa el color de siempre.
+export type Tema = Record<string, string>
+
+// Qué pasó con cada instancia. `aplicada` / `al_dia` / `desfasada` son los normales; el resto dice por qué no se pudo:
+//  - detenida: el contenedor no corre (no se intenta);  inalcanzable: corre pero no contesta;
+//  - sin_soporte: contesta pero es una versión sin el endpoint del tema (libracore < v1.118.0): hay que actualizarla;
+//  - rechazada: la instancia contestó 422;  error: cualquier otro fallo.
+export type EstadoDeTema =
+  | 'aplicada' | 'al_dia' | 'desfasada' | 'detenida' | 'inalcanzable' | 'sin_soporte' | 'rechazada' | 'error'
+
+export type ResultadoDeTema = { slug: string; nombre: string; estado: EstadoDeTema; detalle: string }
+
 export const backoffice = {
+  apariencia: {
+    leer: () => api.get<{ tema: Tema }>('/api/apariencia'),
+    // Guarda ANTES de empujar y un fallo parcial no lo deshace: `resultados` dice a cuáles les llegó.
+    guardar: (tema: Tema) =>
+      api.put<{ tema: Tema; resultados: ResultadoDeTema[] }>('/api/apariencia', { tema }),
+    aplicar: () => api.post<{ tema: Tema; resultados: ResultadoDeTema[] }>('/api/apariencia/aplicar'),
+    estado: () => api.get<{ tema: Tema; instancias: ResultadoDeTema[] }>('/api/apariencia/estado'),
+  },
+
   instancias: () => api.get<{ instancias: Instancia[] }>('/api/instancias'),
   instancia: (slug: string) => api.get<Instancia>(`/api/instancias/${slug}`),
   planes: () => api.get<Plan[]>('/api/planes'),
@@ -186,6 +224,11 @@ export const backoffice = {
   // comentario del router.
   baja: (slug: string, datos: { confirmar_slug: string; hacer_backup: boolean }) =>
     api.post<Baja>(`/api/instancias/${slug}/baja`, datos),
+
+  reenvioCorreo: (slug: string) =>
+    api.get<ReenvioCorreo>(`/api/instancias/${slug}/reenvio-correo`),
+  aplicarReenvioCorreo: (slug: string) =>
+    api.post<AplicarReenvioCorreo>(`/api/instancias/${slug}/reenvio-correo/aplicar`),
 }
 
 // Rutas que consumen los componentes de libra-ui vía su prop `basePath`.

@@ -46,8 +46,29 @@ y nunca sale a internet.
 | `smtp` | Correo saliente **de una instancia**, con la contraseña cifrada en reposo | HTTP |
 | `usuarios` | Usuarios **de una instancia**: alta, edición, baja lógica, borrado y reset de contraseña ajena | HTTP |
 | `salud` | Versión y arranque del backoffice + qué instancias contestan | ambos |
+| `apariencia` | El **tema de la suite**: los colores que el superadmin elige para TODAS las instancias del producto (ADR-007 de `libra-ui`) | HTTP |
 
 Se declaran por entorno: `FEATURES=instancias,smtp,usuarios,salud`.
+
+### `apariencia`: el tema de la suite
+
+Una **suite es un producto**: lo que se elige acá es UN tema para todas sus instancias. La pantalla «Apariencia» lee la lista de colores de
+`libra-ui/tema` (la única, la misma que valida la instancia y pinta la SPA), muestra cómo queda el menú sobre fondo claro y oscuro y no deja
+guardar nada inválido: un fondo sobre el que ningún texto llega a contraste 4,5:1 se rechaza.
+
+Al guardar, el backoffice **guarda primero** (en `TEMA_PATH`, por defecto junto al estado del login, en el volumen persistente) y **después
+empuja** el tema a cada instancia con el token de servicio (`PUT /api/tema`, `libracore` ≥ v1.118.0). Cada instancia lo guarda en su propio
+`config.json` y lo sirve ella misma: su SPA lee de ella y no de acá, así que una instancia sigue con sus colores aunque el backoffice esté
+caído. Un fallo parcial no deshace nada: la pantalla dice qué pasó con cada una (`aplicada`, `detenida`, `no contesta`, `hay que actualizarla`
+si es una versión sin el endpoint, `rechazada`) y «Reaplicar a todas» vuelve a intentar con las que quedaron atrás. Las instancias nuevas
+reciben el tema al darlas de alta (mejor esfuerzo; si no contestan todavía, figuran como `desfasada`).
+
+| Variable | Qué es |
+|---|---|
+| `TEMA_PATH` | Dónde se guarda el tema de la suite. Por defecto, `tema.json` junto a `ADMIN_PANEL_ESTADO_PATH` (o `/var/lib/libra-backoffice/tema.json`). |
+| `TEMA_INSTANCIA_PATH` | La ruta del tema en cada instancia. Por defecto `/api/tema` (la misma en los seis productos). |
+
+Hace falta `LIBRA_SERVICE_TOKEN`, como `smtp` y `usuarios`.
 
 ## Ciclo de vida de una instancia
 

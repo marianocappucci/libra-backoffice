@@ -96,6 +96,18 @@ class UsuarioOut(BaseModel):
     username: str
 
 
+class MeOut(UsuarioOut):
+    """El usuario con sesión: además del nombre, las features de este producto (la barra lateral muestra sólo las pantallas que existen,
+    p. ej. «Apariencia»). La contestan `/api/login`, `/api/login/codigo` y `/api/me`: la SPA arma su usuario con la respuesta del login y,
+    sin `features` ahí, el menú mostraría una pantalla que en este producto da 404 hasta recargar."""
+
+    features: list[str] = []
+
+
+def _con_features(request: Request, username: str) -> MeOut:
+    return MeOut(username=username, features=sorted(request.app.state.settings.features))
+
+
 class RequiereCodigoOut(BaseModel):
     """La respuesta del paso 1 cuando hay segundo factor: `200` sin cookie,
     con el desafío que el paso 2 necesita."""
@@ -130,7 +142,7 @@ def captcha_desafio(request: Request, response: Response):
 
 
 @router.post("/login", response_model=None)
-def login(datos: Credenciales, request: Request, response: Response) -> UsuarioOut | RequiereCodigoOut:
+def login(datos: Credenciales, request: Request, response: Response) -> MeOut | RequiereCodigoOut:
     """Paso 1 del login (o el login entero, en el camino de un solo paso).
 
     Con `codigo` no vacío no cambia nada: es `check_credentials` de siempre,
@@ -160,7 +172,7 @@ def login(datos: Credenciales, request: Request, response: Response) -> UsuarioO
                 if auth.totp_habilitado else "Usuario o contraseña incorrectos.",
             )
         auth.create_session_cookie(response, datos.username)
-        return UsuarioOut(username=datos.username)
+        return _con_features(request, datos.username)
     # Hay segundo factor y no vino código todavía: sólo el paso 1.
     if not auth.verificar_clave(datos.username, datos.password):
         auth.registrar_intento_fallido(ip)
@@ -169,7 +181,7 @@ def login(datos: Credenciales, request: Request, response: Response) -> UsuarioO
     return RequiereCodigoOut(desafio=auth.emitir_desafio_totp(datos.username))
 
 
-@router.post("/login/codigo", response_model=UsuarioOut)
+@router.post("/login/codigo", response_model=MeOut)
 def login_codigo(datos: DesafioCodigo, request: Request, response: Response):
     """Paso 2 del login en dos pasos: el desafío del paso 1 más el código del
     autenticador. Sin sesión, con el mismo rate limiting por IP que el paso 1
@@ -187,7 +199,7 @@ def login_codigo(datos: DesafioCodigo, request: Request, response: Response):
         raise HTTPException(401, "Código incorrecto.")
     response.headers["Cache-Control"] = "no-store"
     auth.create_session_cookie(response, username)
-    return {"username": username}
+    return _con_features(request, username)
 
 
 @router.post("/logout")
@@ -196,6 +208,6 @@ def logout(request: Request, response: Response):
     return {"ok": True}
 
 
-@router.get("/me", response_model=UsuarioOut)
-def me(username: str = Depends(admin_actual)):
-    return {"username": username}
+@router.get("/me", response_model=MeOut)
+def me(request: Request, username: str = Depends(admin_actual)):
+    return _con_features(request, username)

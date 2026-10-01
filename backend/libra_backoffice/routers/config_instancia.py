@@ -37,6 +37,10 @@ router_demos = APIRouter(
     prefix="/api/instancias/{slug}/demo-codigos", tags=["config"],
     dependencies=[Depends(requiere_feature("demos")), Depends(admin_actual)],
 )
+router_reenvio_correo = APIRouter(
+    prefix="/api/instancias/{slug}/reenvio-correo", tags=["config"],
+    dependencies=[Depends(requiere_feature("reenvio-correo")), Depends(admin_actual)],
+)
 
 
 class SmtpIn(BaseModel):
@@ -253,3 +257,83 @@ async def emitir_codigo(slug: str, datos: DemoCodigoIn, request: Request):
 async def revocar_codigo(slug: str, codigo_id: int, request: Request):
     path = f"{request.app.state.settings.demo_codigos_path}/{codigo_id}"
     return await _proxy_demo(request, slug, "DELETE", path)
+
+
+# ── Correo de reenvío ───────────────────────────────────────────────────────
+#
+# Piloto Contalibra. El cliente carga el destino en SU panel (base de SU
+# instancia, endpoint propio del producto — no es de libraauth, igual que
+# `/users`). Este router es sólo lectura hacia ese dato **más** la acción de
+# aplicarlo, de verdad, en el servidor de correo: eso último no es un proxy
+# HTTP a la instancia, es SSH contra el servidor de correo vía
+# `libracore.provisioning.mail_cuentas` — la misma pieza que usa el alta de
+# instancia (`crear_cuenta`/`borrar_cuenta`).
+
+
+def _mail_cuentas():
+    """Import diferido y a propósito.
+
+    Un pin de libracore anterior a la versión que trae `provisioning.mail_cuentas`
+    (ver `test_la_libracore_instalada_le_crea_la_casilla_de_correo_a_la_instancia`
+    en `test_instancias.py`) no tiene este submódulo. Si el import fuera a nivel
+    de archivo, cargar `config_instancia.py` —que pasa siempre, arranque del
+    backoffice incluido— tumbaría TODAS las rutas de este router, no sólo la de
+    aplicar. Acá se paga sólo cuando alguien hace click en "Aplicar".
+    """
+    from libracore.provisioning import mail_cuentas
+    return mail_cuentas
+
+
+@router_reenvio_correo.get("")
+async def leer_reenvio_correo(slug: str, request: Request):
+    """Lo que el cliente cargó en su propio panel. Sólo lectura: no dispara
+    nada contra el servidor de correo."""
+    return await _proxy(
+        request, slug, "GET", request.app.state.settings.reenvio_correo_path
+    )
+
+
+@router_reenvio_correo.post("/aplicar")
+async def aplicar_reenvio_correo(slug: str, request: Request):
+    """Lee el destino que el cliente cargó en SU panel y lo aplica en el
+    servidor de correo.
+
+    Repite el `GET` acá adentro y no confía en nada que mande el navegador del
+    backoffice: la fuente de verdad es lo que el cliente final cargó en su
+    propio panel, y esto lo dispara un humano administrativo, no lo edita.
+    """
+    actual = await _proxy(
+        request, slug, "GET", request.app.state.settings.reenvio_correo_path
+    )
+    destino = (actual or {}).get("destino") or None
+
+    try:
+        mail_cuentas = _mail_cuentas()
+    except ImportError:
+        raise HTTPException(
+            503,
+            "El backoffice no tiene instalado el soporte de reenvío de correo "
+            "(pin de libracore desactualizado).",
+        )
+
+    if not mail_cuentas.configurado():
+        raise HTTPException(
+            409, "El servidor de correo no está configurado en este entorno."
+        )
+
+    try:
+        if destino:
+            mail_cuentas.agregar_reenvio(slug, destino)
+        else:
+            # El cliente limpió el campo en su panel: para cuando esto se
+            # ejecuta el destino viejo ya no existe en ningún lado (la
+            # instancia lo pisó por null), así que no hay nada que "trackear"
+            # — `quitar_reenvio` no lo necesita, borra el script Sieve entero
+            # y es un no-op si no había ninguno.
+            mail_cuentas.quitar_reenvio(slug)
+    except mail_cuentas.MailError as exc:
+        # El mensaje ya viene recortado por `mail_cuentas._ssh()`: no hay nada
+        # sensible que ocultar acá encima.
+        raise HTTPException(502, f"El servidor de correo rechazó la orden: {exc}")
+
+    return {"aplicado": bool(destino), "destino": destino}
