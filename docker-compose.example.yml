@@ -58,6 +58,8 @@ services:
       - PRODUCT_SLUG=gestiolibra
       - PRODUCT_NAME=Gestiolibra
       - FEATURES=instancias,smtp,usuarios,salud
+      # Para sumar «Apariencia» (el tema de la suite): FEATURES=instancias,smtp,usuarios,salud,apariencia. Necesita LIBRA_SERVICE_TOKEN y que
+      # las instancias tengan libracore >= v1.118.0. El tema se guarda junto a ADMIN_PANEL_ESTADO_PATH (el volumen `estado`).
       # La MISMA ruta que en el host, ver la nota 2 de arriba.
       - REPO_ROOT=/root/gestiolibra
       - DB_FILENAME=gestiolibra.db

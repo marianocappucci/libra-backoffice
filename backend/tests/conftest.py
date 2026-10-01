@@ -82,7 +82,7 @@ class _ReenvioCorreoIn(BaseModel):
     destino: str | None = None
 
 
-def construir_instancia_falsa(db_path, *, es_demo=False, roles=("staff", "admin")):
+def construir_instancia_falsa(db_path, *, es_demo=False, roles=("staff", "admin"), con_tema=True):
     """Una instancia de producto: los routers de `libraauth` (SMTP, demo y
     ahora usuarios).
 
@@ -145,6 +145,30 @@ def construir_instancia_falsa(db_path, *, es_demo=False, roles=("staff", "admin"
         return {"destino": app.state.reenvio_correo}
 
     app.include_router(reenvio_correo)
+
+    if con_tema:
+        # El contrato de `libracore.tema_router` (ADR-012): `GET /api/tema` público, `PUT /api/tema` del admin o del token de servicio;
+        # el cuerpo es el tema COMPLETO. `con_tema=False` es una instancia con un libracore anterior a v1.118.0: la ruta no existe y,
+        # como en producción, el PUT cae en un 405 (la SPA sólo sirve GET).
+        app.state.tema = {}
+
+        @app.get("/api/tema")
+        def leer_tema():
+            return {"tema": app.state.tema}
+
+        @app.put("/api/tema", dependencies=[Depends(json_api_require_admin_o_servicio)])
+        def guardar_tema(cuerpo: dict):
+            for valor in cuerpo.get("tema", {}).values():
+                if not isinstance(valor, str) or not valor.startswith("#"):
+                    from fastapi import HTTPException
+                    raise HTTPException(422, "no es un color")
+            app.state.tema = cuerpo["tema"]
+            return {"tema": app.state.tema}
+    else:
+        @app.get("/{ruta:path}")
+        def spa(ruta: str):
+            from fastapi.responses import HTMLResponse
+            return HTMLResponse("<html></html>")
     return app
 
 
@@ -216,13 +240,15 @@ class _TransporteDeInstancias(httpx.AsyncBaseTransport):
 
 def construir_settings(
     tmp_path,
-    features=("instancias", "smtp", "usuarios", "salud", "demos", "reenvio-correo"),
+    features=("instancias", "smtp", "usuarios", "salud", "demos", "reenvio-correo", "apariencia"),
     **extra,
 ):
     base = dict(
         product_slug="gestiolibra", product_name="Gestiolibra",
         features=frozenset(features), repo_root=tmp_path,
         db_filename="gestiolibra.db", service_token=TOKEN,
+        # El tema de la suite se guarda en un archivo: en los tests, uno propio de cada prueba (no el volumen de producción).
+        tema_path=tmp_path / "tema.json",
     )
     return Settings(**{**base, **extra})
 
