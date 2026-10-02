@@ -44,30 +44,52 @@ function Estado({ r }: { r: ResultadoDeTema }) {
   )
 }
 
-/** Cómo queda el ítem activo del menú con los colores elegidos: sobre una barra clara y sobre una oscura (el texto se calcula, así que
- *  se lee en las dos). */
-function Vista({ fondo, borde }: { fondo: string; borde: string }) {
-  const texto = textoSobre(fondo)
-  const item = (activo: boolean, nombre: string) => (
+type ColoresDeVista = Record<'menuActivoFondo' | 'menuActivoBorde' | 'acento' | 'barra' | 'exito' | 'posInicio' | 'posFin', string | undefined>
+
+/** Cómo queda con los colores elegidos, en modo claro y en oscuro: la barra lateral con el ítem activo, un botón con el acento, un monto de
+ *  éxito y la franja del POS. Los textos se calculan como en la app (`textoSobre`), así lo que se ve acá es lo que van a ver. Lo que no se
+ *  eligió (acento y barra: el de cada producto) se dibuja neutro. */
+function Vista({ c }: { c: ColoresDeVista }) {
+  const fondoItem = c.menuActivoFondo ?? '#ecfdf5'
+  const textoItem = textoSobre(fondoItem)
+  const posInicio = c.posInicio ?? '#0284c7'
+  const posFin = c.posFin ?? '#4f46e5'
+  const exito = c.exito ?? '#059669'
+  const item = (activo: boolean, nombre: string, texto: string) => (
     <div
       className="rounded-md px-3 py-2 text-sm"
-      style={activo ? { backgroundColor: fondo, color: texto, boxShadow: `inset 0 0 0 1px ${borde}` } : undefined}
+      style={activo ? { backgroundColor: fondoItem, color: textoItem, boxShadow: `inset 0 0 0 1px ${c.menuActivoBorde ?? '#5ee9b5'}` } : { color: texto }}
     >
       {nombre}
     </div>
   )
+  const panel = (oscuro: boolean) => {
+    const barra = c.barra ?? (oscuro ? '#171717' : '#fafafa')
+    const textoBarra = c.barra ? textoSobre(c.barra) : oscuro ? '#fafafa' : '#262626'
+    const acento = c.acento ?? (oscuro ? '#e5e5e5' : '#171717')
+    return (
+      <div className={`overflow-hidden rounded-lg border ${oscuro ? 'bg-neutral-950 text-neutral-100' : 'bg-white text-neutral-800'}`}>
+        <div className="flex">
+          <div className="w-1/2 space-y-1 p-3" style={{ backgroundColor: barra }}>
+            {item(false, 'Ventas', textoBarra)}
+            {item(true, 'Ítem activo', textoBarra)}
+            {item(false, 'Clientes', textoBarra)}
+          </div>
+          <div className="flex w-1/2 flex-col items-start justify-center gap-2 p-3 text-sm">
+            <span className="rounded-md px-3 py-1.5 font-medium" style={{ backgroundColor: acento, color: textoSobre(acento) }}>Guardar</span>
+            <span className="font-semibold" style={{ color: exito }}>+ $ 12.500</span>
+          </div>
+        </div>
+        <div className="px-3 py-2 text-sm font-semibold" style={{ backgroundImage: `linear-gradient(to right, ${posInicio}, ${posFin})`, color: c.posInicio ? textoSobre(posInicio) : '#ffffff' }}>
+          POS (Caja) · Nueva venta
+        </div>
+      </div>
+    )
+  }
   return (
-    <div className="grid gap-3 sm:grid-cols-2" aria-label="Vista previa del menú">
-      <div className="space-y-1 rounded-lg border bg-white p-3 text-neutral-700">
-        {item(false, 'Ventas')}
-        {item(true, 'Ítem activo')}
-        {item(false, 'Clientes')}
-      </div>
-      <div className="space-y-1 rounded-lg border bg-neutral-900 p-3 text-neutral-200">
-        {item(false, 'Ventas')}
-        {item(true, 'Ítem activo')}
-        {item(false, 'Clientes')}
-      </div>
+    <div className="grid gap-3 sm:grid-cols-2" aria-label="Vista previa">
+      {panel(false)}
+      {panel(true)}
     </div>
   )
 }
@@ -106,7 +128,6 @@ export function Apariencia() {
   const { tema: limpio, errores } = useMemo(() => validarTema(valores), [valores])
   const hayErrores = Object.keys(errores).length > 0
   const cambios = JSON.stringify(limpio) !== JSON.stringify(guardado)
-  const color = (clave: string) => limpio[clave as keyof typeof limpio] ?? COLORES_DE_TEMA.find((d) => d.clave === clave)!.porDefecto
 
   function poner(clave: string, valor: string) {
     setAviso(null)
@@ -173,12 +194,13 @@ export function Apariencia() {
         <CardContent className="space-y-5">
           {COLORES_DE_TEMA.map((def) => {
             const personalizado = limpio[def.clave] !== undefined
-            const valor = valores[def.clave] ?? def.porDefecto
+            // Acento y barra lateral: el «de siempre» es el de cada producto (no hay un valor único), así que el campo queda vacío.
+            const valor = valores[def.clave] ?? (def.defectoPorProducto ? '' : def.porDefecto)
             return (
               <div key={def.clave} className="grid gap-1.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <Label htmlFor={`hex-${def.clave}`}>{def.etiqueta}</Label>
-                  <Badge variant={personalizado ? 'default' : 'outline'}>{personalizado ? 'Personalizado' : 'De siempre'}</Badge>
+                  <Badge variant={personalizado ? 'default' : 'outline'}>{personalizado ? 'Personalizado' : def.defectoPorProducto ? 'El de cada producto' : 'De siempre'}</Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">{def.ayuda}</p>
                 <div className="flex flex-wrap items-center gap-2">
@@ -192,6 +214,7 @@ export function Apariencia() {
                   <Input
                     id={`hex-${def.clave}`}
                     value={valor}
+                    placeholder={def.defectoPorProducto ? 'del producto' : undefined}
                     onChange={(e) => poner(def.clave, e.target.value)}
                     className="w-32 font-mono"
                     spellCheck={false}
@@ -214,7 +237,17 @@ export function Apariencia() {
 
           <div className="grid gap-1.5">
             <p className="text-sm font-medium">Vista previa</p>
-            <Vista fondo={color('menuActivoFondo')} borde={color('menuActivoBorde')} />
+            <Vista
+              c={{
+                menuActivoFondo: limpio.menuActivoFondo,
+                menuActivoBorde: limpio.menuActivoBorde,
+                acento: limpio.acento,
+                barra: limpio.barraLateralFondo,
+                exito: limpio.exito,
+                posInicio: limpio.posEncabezadoInicio,
+                posFin: limpio.posEncabezadoFin,
+              }}
+            />
           </div>
 
           {error && (
