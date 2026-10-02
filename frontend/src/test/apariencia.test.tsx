@@ -48,7 +48,27 @@ describe('Apariencia', () => {
     montar()
     expect(await screen.findByLabelText('Ítem activo del menú: fondo')).toHaveValue('#ecfdf5')
     expect(screen.getByLabelText('Ítem activo del menú: borde')).toHaveValue('#5ee9b5')
-    expect(screen.getAllByText('De siempre')).toHaveLength(2)
+    // El éxito y la franja del POS tienen valor de siempre; el acento y la barra lateral son «el de cada producto» y el campo queda vacío.
+    expect(screen.getByLabelText('Color de éxito')).toHaveValue('#059669')
+    expect(screen.getByLabelText('Encabezado del POS: inicio')).toHaveValue('#0284c7')
+    expect(screen.getByLabelText('Acento principal')).toHaveValue('')
+    expect(screen.getByLabelText('Barra lateral: fondo')).toHaveValue('')
+    expect(screen.getAllByText('De siempre')).toHaveLength(5)
+    expect(screen.getAllByText('El de cada producto')).toHaveLength(2)
+  })
+
+  it('un color nuevo se manda con su clave y un acento casi negro se rechaza antes de guardar', async () => {
+    const user = userEvent.setup()
+    const llamadas = montar({ resultados: [OK('acme', 'ACME SA', 'aplicada')] })
+    const acento = await screen.findByLabelText('Acento principal')
+    await user.type(acento, '#171717')
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no se distingue del fondo/)
+    expect(await boton(/Guardar y aplicar/)).toBeDisabled()
+    await user.clear(acento)
+    await user.type(acento, '#0F766E')
+    await user.click(await boton(/Guardar y aplicar/))
+    await waitFor(() => expect(llamadas.some((l) => l.metodo === 'PUT')).toBe(true))
+    expect(llamadas.find((l) => l.metodo === 'PUT')!.cuerpo).toEqual({ tema: { acento: '#0f766e' } })
   })
 
   it('guardar manda el tema normalizado a minúsculas y cuenta qué pasó con cada instancia', async () => {
