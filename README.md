@@ -232,7 +232,8 @@ cd frontend && npm install && npm run build
 | `ADMIN_PANEL_TOTP_SECRET` | no | Segundo factor del superadmin (libraauth v0.36.0). Con esto seteado el login pide el código del autenticador. Se genera con `python -m libraauth.totp <producto>`; un valor inválido no deja levantar. |
 | `ADMIN_PANEL_ESTADO_PATH` | no | Archivo donde el bloqueo por intentos fallidos sobrevive al reinicio. El compose de ejemplo lo monta en un volumen. |
 | `ADMIN_PANEL_TOTP_PATH` | no | Archivo del secreto TOTP enrolado en runtime desde la pantalla Seguridad (F3). Default: `totp.json` al lado de `ADMIN_PANEL_ESTADO_PATH`. Ver "Seguridad: doble factor del superadmin". |
-| `REPO_ROOT` | sí | Checkout del producto en el host, donde vive `clientes/`. |
+| `REPO_ROOT` | sí | Checkout del producto en el host, de donde se importan `panel_admin.py` / `nuevo_cliente.py` / `plans.py` y, por defecto, donde vive `clientes/`. |
+| `LIBRA_CLIENTES_DIR` | no | Ruta **absoluta** del directorio de instancias, si no es `REPO_ROOT/clientes`. Requiere libracore >= v1.123.0 (con una anterior se ignora en silencio). Ver "Dónde viven las instancias". |
 | `DB_FILENAME` | sí | Nombre del archivo de base de cada instancia (`contalibra.db`). |
 | `LIBRA_SERVICE_TOKEN` | con `smtp`/`usuarios` | El mismo valor que tienen seteado las instancias de este producto. |
 | `SMTP_PATH` | no | Default `/admin/smtp`. Contalibra y Restolibra usan `/api/config/smtp`. |
@@ -250,6 +251,68 @@ cd frontend && npm install && npm run build
 > Una instancia **sin** la variable seteada rechaza el token y sigue
 > funcionando como antes: el guard de libraauth es opt-in por ausencia. Eso es
 > lo que permite actualizar a `v0.7.0` sin tocar ningún compose.
+
+## Dónde viven las instancias (`LIBRA_CLIENTES_DIR`)
+
+Cada instancia es una carpeta `<slug>/` con su `cliente.json`, su
+`docker-compose.yml` y su `data/`. Por defecto el directorio que las contiene es
+`REPO_ROOT/clientes`, y **no cambia nada** mientras no se defina lo de abajo.
+
+Desde libracore v1.123.0 (el pin de este repo) esa ubicación se resuelve en un
+solo lugar, `libracore.provisioning.get_config().clientes_dir`, con esta
+precedencia:
+
+1. el parámetro `clientes_dir=` que el `configure()` del producto le pase (hoy
+   ninguno en `develop` al 2026-10-03);
+2. la variable de entorno `LIBRA_CLIENTES_DIR` (vacía cuenta como no definida;
+   se lee en cada acceso, no al arrancar);
+3. `REPO_ROOT/clientes`.
+
+Antes `libracore.admin.services` (lo que usa este backoffice) leía la constante
+`CLIENTES_DIR` del `scripts/panel_admin.py` del producto, y el alta y el cron
+leían otra cosa: cambiar una sola dejaba al cron y al backoffice mirando carpetas
+distintas. Ahora los tres leen la misma, y `CLIENTES_DIR` queda en los scripts
+sólo por compatibilidad.
+
+Para mover las instancias fuera del checkout hace falta, **los tres a la vez**:
+
+- **La misma variable en todos los procesos que operan instancias:** el
+  contenedor de este backoffice (`environment:` del compose, o el
+  `/etc/<producto>-admin.env`), el cron de `panel_admin.py` (`backup-all`,
+  `resguardo-externo`, `estado-externo`) y las sesiones de línea de comandos.
+  Con valores distintos, cada uno ve su propio inventario. Usar ruta absoluta:
+  una relativa se resuelve contra el directorio de cada proceso.
+- **El mount espejado de ese directorio en este contenedor.** Es la misma razón
+  por la que el checkout se monta espejado (`/root/<producto>:/root/<producto>`):
+  `docker compose` corre acá adentro pero el daemon resuelve los binds en el
+  **host**, así que la ruta del `-f` y la de `data/` tienen que ser idénticas
+  adentro y afuera. Si `clientes/` sale de `REPO_ROOT`, queda fuera de ese mount
+  y el inventario se ve vacío; un symlink queda colgado dentro del contenedor.
+  Ejemplo, con el destino propuesto `/srv/libra/<producto>/clientes`:
+
+  ```yaml
+  environment:
+    - LIBRA_CLIENTES_DIR=/srv/libra/<producto>/clientes
+  volumes:
+    - /root/<producto>:/root/<producto>             # el checkout (scripts), como siempre
+    - /srv/libra/<producto>:/srv/libra/<producto>   # espejado: misma ruta adentro y afuera
+  ```
+
+  Con el backoffice como servicio de systemd (`Environment=`) es sólo la
+  variable en la unidad.
+- **Un pin de libracore >= v1.123.0 acá adentro.** Es ESTE contenedor el que
+  importa el `panel_admin.py` del producto con su propia libracore: un producto
+  que pase `configure(clientes_dir=...)` exige el pin acá (si no, `TypeError` en
+  cada `GET /api/instancias`, con el contenedor `healthy`; mismo mecanismo que
+  `backup_zip` y `migraciones`), y con un pin anterior la variable se ignora sin
+  avisar. Lo cubre
+  `test_la_libracore_instalada_acepta_clientes_dir_en_configure`.
+
+> ⚠️ `docker-compose.example.yml` **todavía no** trae el mount ni la variable:
+> es la etapa 2 del plan *Sacar `clientes/` del árbol del repo* (wiki). Esta
+> sección documenta el mecanismo; apuntarlo a otro directorio y mover datos es
+> un paso aparte, que se pide por separado. **Rollback:** sacar la variable y el
+> mount extra.
 
 ## Despliegue
 
