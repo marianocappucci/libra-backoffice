@@ -362,11 +362,34 @@ def test_planes(admin):
 
 # ── sys.modules: el backend libracore de verdad ─────────────────────────────
 
-def test_inventario_libracore_usa_admin_services(tmp_path, monkeypatch):
-    """Que `construir_inventario` cablea `libracore.admin.services` y lo
-    configura con el repo del producto."""
+@pytest.fixture
+def provisioning_aislada(monkeypatch):
+    """`provisioning.configure()` fija estado global y toca `sys.path`: lo deja
+    como estaba, y sin `LIBRA_CLIENTES_DIR` heredada del entorno de quien corre
+    la suite (que haría pasar o fallar los tests de abajo según la máquina)."""
+    from libracore import provisioning
+
+    monkeypatch.setattr(provisioning, "_cfg", provisioning._cfg)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    monkeypatch.delenv("LIBRA_CLIENTES_DIR", raising=False)
+    return provisioning
+
+
+def _configurar_producto(provisioning, repo_root, **extra):
+    """Lo que hace el `scripts/panel_admin.py` de un producto al importarse."""
+    provisioning.configure(
+        product_name="Prueba", image_name="prueba", container_prefix="prueba",
+        db_filename="prueba.db", repo_root=repo_root, **extra,
+    )
+
+
+def _panel_admin_falso(monkeypatch, tmp_path, *, constante_vieja):
+    """`CLIENTES_DIR` es la constante que cada producto calculaba por su cuenta y
+    que `libracore.admin.services` leía hasta v1.122.0. Desde v1.123.0 ya no manda:
+    se la deja apuntando a un directorio **distinto** del real a propósito, para
+    que un servicio que todavía la lea falle en vez de coincidir de casualidad."""
     panel_admin = types.ModuleType("panel_admin")
-    panel_admin.CLIENTES_DIR = tmp_path / "clientes"
+    panel_admin.CLIENTES_DIR = constante_vieja
     panel_admin._NPM_AVAILABLE = False
     panel_admin.load_clients = lambda: [
         {"slug": "acme", "nombre": "ACME", "container": "prod-acme",
@@ -374,6 +397,14 @@ def test_inventario_libracore_usa_admin_services(tmp_path, monkeypatch):
     ]
     panel_admin.container_status = lambda c: {"status": "running", "started": "hace 1 día"}
     monkeypatch.setitem(sys.modules, "panel_admin", panel_admin)
+    return panel_admin
+
+
+def test_inventario_libracore_usa_admin_services(tmp_path, monkeypatch, provisioning_aislada):
+    """Que `construir_inventario` cablea `libracore.admin.services` y lo
+    configura con el repo del producto."""
+    _configurar_producto(provisioning_aislada, tmp_path)
+    _panel_admin_falso(monkeypatch, tmp_path, constante_vieja=tmp_path / "clientes-del-script")
 
     settings = construir_settings(tmp_path)
     instancias = construir_inventario(settings).listar()
@@ -381,6 +412,72 @@ def test_inventario_libracore_usa_admin_services(tmp_path, monkeypatch):
     assert instancias[0].slug == "acme"
     assert instancias[0].container == "prod-acme"
     assert instancias[0].estado == "running"
+
+
+def test_el_directorio_de_instancias_sale_del_parametro_de_configure(
+    tmp_path, monkeypatch, provisioning_aislada,
+):
+    """🔑 La fuente es `get_config().clientes_dir`, no `panel_admin.CLIENTES_DIR`.
+
+    Todo lo demás de esta suite corre contra dobles, así que con un pin viejo
+    (que leía la constante) quedaría en verde y el backoffice listaría —y
+    respaldaría en— una carpeta distinta de la que usa el cron de `panel_admin`.
+    """
+    destino = tmp_path / "srv" / "clientes"
+    _configurar_producto(provisioning_aislada, tmp_path, clientes_dir=destino)
+    _panel_admin_falso(monkeypatch, tmp_path, constante_vieja=tmp_path / "clientes-del-script")
+
+    servicios = construir_inventario(construir_settings(tmp_path)).servicios
+
+    assert servicios._clientes_dir() == destino
+
+
+def test_el_directorio_de_instancias_sale_de_la_variable_de_entorno(
+    tmp_path, monkeypatch, provisioning_aislada,
+):
+    """El camino que usan los despliegues: `LIBRA_CLIENTES_DIR` en el entorno
+    del contenedor, sin tocar el `panel_admin.py` del producto."""
+    destino = tmp_path / "srv" / "clientes"
+    monkeypatch.setenv("LIBRA_CLIENTES_DIR", str(destino))
+    _configurar_producto(provisioning_aislada, tmp_path)
+    _panel_admin_falso(monkeypatch, tmp_path, constante_vieja=tmp_path / "clientes-del-script")
+
+    servicios = construir_inventario(construir_settings(tmp_path)).servicios
+
+    assert servicios._clientes_dir() == destino
+
+
+def test_sin_parametro_ni_variable_el_directorio_sigue_siendo_repo_root_clientes(
+    tmp_path, monkeypatch, provisioning_aislada,
+):
+    """El default no cambia: subir el pin no mueve a nadie de lugar."""
+    _configurar_producto(provisioning_aislada, tmp_path)
+    _panel_admin_falso(monkeypatch, tmp_path, constante_vieja=tmp_path / "clientes-del-script")
+
+    servicios = construir_inventario(construir_settings(tmp_path)).servicios
+
+    assert servicios._clientes_dir() == tmp_path / "clientes"
+
+
+def test_la_libracore_instalada_acepta_clientes_dir_en_configure():
+    """El pin tiene que entender `configure(clientes_dir=...)` (>= v1.123.0).
+
+    Igual que `backup_zip` (2026-08-12) y `migraciones` (2026-08-24): el
+    `scripts/panel_admin.py` del producto lo importa ESTE contenedor con la
+    libracore de acá, así que un producto que pase `clientes_dir=` con un pin
+    viejo deja el panel entero en 500 (`TypeError: unexpected keyword argument`)
+    mientras el contenedor sigue `healthy`. Y la variable `LIBRA_CLIENTES_DIR`,
+    sin esta versión, se ignora en silencio.
+    """
+    import inspect
+
+    from libracore import provisioning
+
+    assert "clientes_dir" in inspect.signature(provisioning.configure).parameters, (
+        "La libracore instalada no acepta `clientes_dir` en configure(): hace "
+        "falta subir el pin de libracore en backend/pyproject.toml (>= v1.123.0)."
+    )
+    assert provisioning.CLIENTES_DIR_ENV == "LIBRA_CLIENTES_DIR"
 
 
 def test_la_libracore_instalada_entiende_el_mensaje_del_corte():
