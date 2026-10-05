@@ -148,7 +148,12 @@ dependencies = [
     # esquema de los productos (cobros de cuenta corriente, FCE, `cae_error`);
     # **este paquete no las corre**: no tiene base propia, administra las
     # instancias por `docker exec`. Corren en el deploy de cada producto.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.123.0",
+    #
+    # v1.134.0 (2026-10-05): igual que el salto anterior, trae migraciones del
+    # esquema de los productos (0016 el emisor por comprobante, 0017 la anulacion
+    # con rastro) que **este paquete no corre**: corren en el deploy de cada
+    # producto, y los ocho ya estan en esta version.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.134.0",
     "fastapi>=0.111,<1",
     "uvicorn[standard]>=0.30,<1",
     # El control plane le habla a cada instancia por HTTP.
