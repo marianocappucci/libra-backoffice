@@ -7,6 +7,8 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import { IDENTIDAD, defectosDelProducto, menuActivoDeProducto, type Producto } from 'libra-ui/identidad'
+
 import { Apariencia } from '../pages/Apariencia'
 
 function json(body: unknown, status = 200) {
@@ -17,14 +19,14 @@ type Init = { method?: string; body?: string } | undefined
 
 const OK = (slug: string, nombre: string, estado: string, detalle = '') => ({ slug, nombre, estado, detalle })
 
-function montar(opciones: { tema?: Record<string, string>; estado?: unknown[]; resultados?: unknown[] } = {}) {
+function montar(opciones: { tema?: Record<string, string>; estado?: unknown[]; resultados?: unknown[]; producto?: string } = {}) {
   const llamadas: { metodo: string; url: string; cuerpo: unknown }[] = []
   let guardado = opciones.tema ?? {}
   vi.stubGlobal('fetch', vi.fn((url: string, init: Init) => {
     const u = String(url)
     const metodo = init?.method ?? 'GET'
     llamadas.push({ metodo, url: u, cuerpo: init?.body ? JSON.parse(init.body) : undefined })
-    if (u.endsWith('/api/apariencia') && metodo === 'GET') return Promise.resolve(json({ tema: guardado }))
+    if (u.endsWith('/api/apariencia') && metodo === 'GET') return Promise.resolve(json({ tema: guardado, ...(opciones.producto ? { producto: opciones.producto } : {}) }))
     if (u.endsWith('/api/apariencia') && metodo === 'PUT') {
       guardado = JSON.parse(String(init?.body)).tema
       return Promise.resolve(json({ tema: guardado, resultados: opciones.resultados ?? [OK('acme', 'ACME SA', 'aplicada')] }))
@@ -45,16 +47,78 @@ const boton = (nombre: RegExp) => screen.findByRole('button', { name: nombre })
 
 describe('Apariencia', () => {
   it('arma una fila por cada color del kit, con su ayuda, y todos arrancan «de siempre»', async () => {
+    // Sin producto (un backend viejo que no lo manda): lo que depende del producto (acento, barra e ítem activo) queda vacío y se dice «el de cada
+    // producto»; nunca el verde. La vista previa usa entonces los neutros del kit.
     montar()
-    expect(await screen.findByLabelText('Ítem activo del menú: fondo')).toHaveValue('#ecfdf5')
-    expect(screen.getByLabelText('Ítem activo del menú: borde')).toHaveValue('#5ee9b5')
-    // El éxito y la franja del POS tienen valor de siempre; el acento y la barra lateral son «el de cada producto» y el campo queda vacío.
+    expect(await screen.findByLabelText('Ítem activo del menú: fondo')).toHaveValue('')
+    expect(screen.getByLabelText('Ítem activo del menú: borde')).toHaveValue('')
+    // El éxito y la franja del POS tienen valor de siempre.
     expect(screen.getByLabelText('Color de éxito')).toHaveValue('#059669')
     expect(screen.getByLabelText('Encabezado del POS: inicio')).toHaveValue('#0284c7')
     expect(screen.getByLabelText('Acento principal')).toHaveValue('')
     expect(screen.getByLabelText('Barra lateral: fondo')).toHaveValue('')
-    expect(screen.getAllByText('De siempre')).toHaveLength(5)
-    expect(screen.getAllByText('El de cada producto')).toHaveLength(2)
+    expect(screen.getAllByText('De siempre')).toHaveLength(3)
+    expect(screen.getAllByText('El de cada producto')).toHaveLength(4)
+  })
+
+  it('🔴 con el producto conocido, «de siempre» es el del producto: ítem activo, acento y barra; ni el verde ni el botón negro', async () => {
+    montar({ producto: 'contalibra' })
+    const d = defectosDelProducto('contalibra')
+    expect(await screen.findByLabelText('Ítem activo del menú: fondo')).toHaveValue(d.menuActivoFondo)
+    expect(screen.getByLabelText('Ítem activo del menú: borde')).toHaveValue(d.menuActivoBorde)
+    expect(screen.getByLabelText('Acento principal')).toHaveValue(IDENTIDAD.contalibra.colorAccion)
+    expect(screen.getByLabelText('Barra lateral: fondo')).toHaveValue('#fafafa')
+    expect(d.menuActivoFondo).not.toBe('#ecfdf5')
+    expect(screen.getAllByText('De siempre')).toHaveLength(7)
+    expect(screen.queryByText('El de cada producto')).toBeNull()
+    expect(screen.getByText(/de ContaLibra/)).toBeInTheDocument()
+  })
+
+  it.each(Object.keys(IDENTIDAD) as Producto[])('🔴 %s: la vista previa pinta el ítem activo y el botón con los colores del producto, en claro y en oscuro', async (p) => {
+    montar({ producto: p })
+    await screen.findByLabelText('Acento principal')
+    const vista = screen.getByLabelText('Vista previa')
+    const activos = within(vista).getAllByText('Ítem activo')
+    const botones = within(vista).getAllByText('Guardar')
+    const { fondo, borde, texto } = menuActivoDeProducto(p)
+    expect(activos).toHaveLength(2)
+    for (const a of activos) {
+      expect(a).toHaveStyle({ backgroundColor: fondo, color: texto })
+      expect(a.style.boxShadow).toContain(borde)
+    }
+    // Claro: el acento de acción con texto blanco. Oscuro: la variante clara con el texto oscuro de la familia.
+    expect(botones[0]).toHaveStyle({ backgroundColor: IDENTIDAD[p].colorAccion, color: '#ffffff' })
+    expect(botones[1]).toHaveStyle({ backgroundColor: IDENTIDAD[p].colorSobreOscuro, color: '#0b1324' })
+  })
+
+  it('sin producto conocido la vista previa usa los neutros del kit, no el verde de antes', async () => {
+    montar()
+    await screen.findByLabelText('Acento principal')
+    const activo = within(screen.getByLabelText('Vista previa')).getAllByText('Ítem activo')[0]
+    expect(activo).toHaveStyle({ backgroundColor: '#f5f5f5' })
+    expect(activo.style.boxShadow).toContain('#d4d4d4')
+    expect(activo.style.boxShadow).not.toContain('#5ee9b5')
+  })
+
+  it('un color elegido en el formulario le gana al del producto en la vista previa, y el texto del ítem se calcula', async () => {
+    const user = userEvent.setup()
+    montar({ producto: 'restolibra' })
+    const fondo = await screen.findByLabelText('Ítem activo del menú: fondo')
+    await user.clear(fondo)
+    await user.type(fondo, '#1e3a8a')
+    const activos = within(screen.getByLabelText('Vista previa')).getAllByText('Ítem activo')
+    expect(activos[0]).toHaveStyle({ backgroundColor: '#1e3a8a', color: '#ffffff' })
+    // El borde no se tocó: sigue el del producto.
+    expect(activos[0].style.boxShadow).toContain(menuActivoDeProducto('restolibra').borde)
+  })
+
+  it('🔴 abrir la pantalla y guardar sin tocar nada no guarda los defectos como si se hubieran elegido', async () => {
+    const user = userEvent.setup()
+    const llamadas = montar({ producto: 'ventalibra', tema: { exito: '#047857' } })
+    await screen.findByLabelText('Acento principal')
+    await user.click(await boton(/Guardar y aplicar/))
+    await waitFor(() => expect(llamadas.some((l) => l.metodo === 'PUT')).toBe(true))
+    expect(llamadas.find((l) => l.metodo === 'PUT')!.cuerpo).toEqual({ tema: { exito: '#047857' } })
   })
 
   it('un color nuevo se manda con su clave y un acento casi negro se rechaza antes de guardar', async () => {

@@ -102,7 +102,9 @@ async def empujar_tema(request: Request, tema: dict[str, str], instancias: list 
 
 @router.get("")
 def leer(request: Request):
-    return {"tema": _almacen(request).leer()}
+    """El tema guardado y el producto de este backoffice (`PRODUCT_SLUG`): con él la pantalla dibuja «De siempre» y la vista previa con el color
+    del producto (`defectosDelProducto` de `libra-ui/identidad`, ADR-036). No depende de la feature `salud`, que puede no estar."""
+    return {"tema": _almacen(request).leer(), "producto": request.app.state.settings.product_slug}
 
 
 @router.put("")

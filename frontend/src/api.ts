@@ -171,7 +171,8 @@ export type ResultadoDeTema = { slug: string; nombre: string; estado: EstadoDeTe
 
 export const backoffice = {
   apariencia: {
-    leer: () => api.get<{ tema: Tema }>('/api/apariencia'),
+    // `producto` es el `PRODUCT_SLUG` de este backoffice; ausente en un backend viejo (la pantalla dibuja entonces los defectos neutros).
+    leer: () => api.get<{ tema: Tema; producto?: string }>('/api/apariencia'),
     // Guarda ANTES de empujar y un fallo parcial no lo deshace: `resultados` dice a cuáles les llegó.
     guardar: (tema: Tema) =>
       api.put<{ tema: Tema; resultados: ResultadoDeTema[] }>('/api/apariencia', { tema }),
