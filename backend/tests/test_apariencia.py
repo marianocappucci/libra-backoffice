@@ -35,7 +35,14 @@ def test_sin_la_feature_no_existe(tmp_path, inventario, instancias_falsas):
 
 
 def test_arranca_vacio(logueado):
-    assert logueado.get("/api/apariencia").json() == {"tema": {}}
+    assert logueado.get("/api/apariencia").json()["tema"] == {}
+
+
+def test_leer_dice_de_que_producto_es(logueado):
+    # La pantalla necesita el producto para mostrar los colores de siempre de ESE producto (ADR-036 de libra-ui).
+    r = logueado.get("/api/apariencia").json()
+    assert r["producto"] == logueado.app.state.settings.product_slug
+    assert r["producto"]
 
 
 def test_guardar_normaliza_persiste_y_empuja_a_cada_instancia(logueado, instancias_falsas):
@@ -48,7 +55,7 @@ def test_guardar_normaliza_persiste_y_empuja_a_cada_instancia(logueado, instanci
     assert estados == {"acme": "aplicada", "beta": "aplicada", "caida": "detenida"}
     assert instancias_falsas["producto-acme"].state.tema == NORMALIZADO
     assert instancias_falsas["producto-beta"].state.tema == NORMALIZADO
-    assert logueado.get("/api/apariencia").json() == {"tema": NORMALIZADO}
+    assert logueado.get("/api/apariencia").json()["tema"] == NORMALIZADO
 
 
 def test_el_tema_sobrevive_a_un_reinicio_del_backoffice(logueado, tmp_path, inventario, instancias_falsas):
@@ -56,7 +63,7 @@ def test_el_tema_sobrevive_a_un_reinicio_del_backoffice(logueado, tmp_path, inve
     otra = create_app(construir_settings(tmp_path), inventario=inventario)
     with TestClient(otra, base_url="https://testserver") as c:
         assert login(c, {"username": USUARIO, "password": PASSWORD}).status_code == 200
-        assert c.get("/api/apariencia").json() == {"tema": NORMALIZADO}
+        assert c.get("/api/apariencia").json()["tema"] == NORMALIZADO
 
 
 def test_un_tema_vacio_restaura_los_valores_por_defecto_en_todas(logueado, instancias_falsas):
@@ -64,13 +71,13 @@ def test_un_tema_vacio_restaura_los_valores_por_defecto_en_todas(logueado, insta
     r = logueado.put("/api/apariencia", json={"tema": {}})
     assert r.status_code == 200
     assert instancias_falsas["producto-acme"].state.tema == {}
-    assert logueado.get("/api/apariencia").json() == {"tema": {}}
+    assert logueado.get("/api/apariencia").json()["tema"] == {}
 
 
 @pytest.mark.parametrize("malo", [{"menuActivoFondo": "verde"}, {"1x": "#ffffff"}, {"a": "#12"}, {"menuActivoFondo": ""}])
 def test_lo_que_no_tiene_la_forma_es_422_y_no_se_guarda_ni_se_empuja(logueado, instancias_falsas, malo):
     assert logueado.put("/api/apariencia", json={"tema": malo}).status_code == 422
-    assert logueado.get("/api/apariencia").json() == {"tema": {}}
+    assert logueado.get("/api/apariencia").json()["tema"] == {}
     assert instancias_falsas["producto-acme"].state.tema == {}
 
 
@@ -86,7 +93,7 @@ def test_una_instancia_caida_no_tumba_a_las_demas_y_el_tema_queda_guardado(tmp_p
         estados = {s: x["estado"] for s, x in _por_slug(r["resultados"]).items()}
         assert estados == {"acme": "aplicada", "beta": "inalcanzable", "caida": "detenida"}
         assert instancias_falsas["producto-acme"].state.tema == NORMALIZADO
-        assert c.get("/api/apariencia").json() == {"tema": NORMALIZADO}
+        assert c.get("/api/apariencia").json()["tema"] == NORMALIZADO
 
 
 def test_una_instancia_con_un_libracore_viejo_figura_como_sin_soporte(tmp_path, inventario):
