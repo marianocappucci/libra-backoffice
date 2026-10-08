@@ -47,8 +47,9 @@ const boton = (nombre: RegExp) => screen.findByRole('button', { name: nombre })
 
 describe('Apariencia', () => {
   it('arma una fila por cada color del kit, con su ayuda, y todos arrancan «de siempre»', async () => {
-    // Sin producto (un backend viejo que no lo manda): lo que depende del producto (acento, barra e ítem activo) queda vacío y se dice «el de cada
-    // producto»; nunca el verde. La vista previa usa entonces los neutros del kit.
+    // Sin producto (un backend viejo que no lo manda): lo que depende del producto (acento e ítem activo) queda vacío y se dice «el de cada
+    // producto»; nunca el verde. La vista previa usa entonces los neutros del kit. La barra lateral ya no depende del producto (ADR-042 del kit):
+    // su defecto es el de `libra-ui/tema.css`, `#ebebeb`.
     montar()
     expect(await screen.findByLabelText('Ítem activo del menú: fondo')).toHaveValue('')
     expect(screen.getByLabelText('Ítem activo del menú: borde')).toHaveValue('')
@@ -56,9 +57,9 @@ describe('Apariencia', () => {
     expect(screen.getByLabelText('Color de éxito')).toHaveValue('#059669')
     expect(screen.getByLabelText('Encabezado del POS: inicio')).toHaveValue('#0284c7')
     expect(screen.getByLabelText('Acento principal')).toHaveValue('')
-    expect(screen.getByLabelText('Barra lateral: fondo')).toHaveValue('')
-    expect(screen.getAllByText('De siempre')).toHaveLength(3)
-    expect(screen.getAllByText('El de cada producto')).toHaveLength(4)
+    expect(screen.getByLabelText('Barra lateral: fondo')).toHaveValue('#ebebeb')
+    expect(screen.getAllByText('De siempre')).toHaveLength(4)
+    expect(screen.getAllByText('El de cada producto')).toHaveLength(3)
   })
 
   it('🔴 con el producto conocido, «de siempre» es el del producto: ítem activo, acento y barra; ni el verde ni el botón negro', async () => {
@@ -67,7 +68,7 @@ describe('Apariencia', () => {
     expect(await screen.findByLabelText('Ítem activo del menú: fondo')).toHaveValue(d.menuActivoFondo)
     expect(screen.getByLabelText('Ítem activo del menú: borde')).toHaveValue(d.menuActivoBorde)
     expect(screen.getByLabelText('Acento principal')).toHaveValue(IDENTIDAD.contalibra.colorAccion)
-    expect(screen.getByLabelText('Barra lateral: fondo')).toHaveValue('#fafafa')
+    expect(screen.getByLabelText('Barra lateral: fondo')).toHaveValue('#ebebeb')
     expect(d.menuActivoFondo).not.toBe('#ecfdf5')
     expect(screen.getAllByText('De siempre')).toHaveLength(7)
     expect(screen.queryByText('El de cada producto')).toBeNull()
