@@ -31,9 +31,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+import { SelectBuscable } from 'libra-ui/SelectBuscable'
 
 import { ApiError, backoffice, type AltaIn, type InstanciaCreada, type Plan } from '../api'
 
@@ -250,19 +248,17 @@ export function AltaInstancia({ planes, slugsPrevios, recargar }: Props) {
             {planes.length > 0 && (
               <div className="grid gap-2">
                 <Label htmlFor="alta-plan">Plan</Label>
-                <Select value={campos.plan || undefined} onValueChange={(v) => set('plan', v)}>
-                  <SelectTrigger id="alta-plan">
-                    <SelectValue placeholder="Básico" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {planes.map((p) => (
-                      <SelectItem key={p.key} value={p.key}>
-                        {p.label}
-                        {p.precio != null && ` — $${p.precio.toLocaleString('es-AR')}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SelectBuscable
+                  id="alta-plan"
+                  value={campos.plan}
+                  onChange={(v) => set('plan', v)}
+                  placeholder="Básico"
+                  limpiable
+                  opciones={planes.map((p) => ({
+                    value: p.key,
+                    label: `${p.label}${p.precio != null ? ` — $${p.precio.toLocaleString('es-AR')}` : ''}`,
+                  }))}
+                />
               </div>
             )}
 

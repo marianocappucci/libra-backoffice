@@ -20,9 +20,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+import { SelectBuscable } from 'libra-ui/SelectBuscable'
 import { variantePorEstado } from '@/lib/servicio'
 
 import { BajaInstancia } from '../components/BajaInstancia'
@@ -206,25 +204,21 @@ export function Instancia() {
         {planes.length > 0 && (
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Plan</span>
-            <Select
-              value={instancia.plan || undefined}
+            <SelectBuscable
+              className="w-56"
+              value={instancia.plan || ''}
               disabled={ocupado}
-              onValueChange={(plan) =>
+              ariaLabel="Plan"
+              placeholder="Sin plan asignado"
+              limpiable={false}
+              onChange={(plan) =>
                 ejecutar(() => backoffice.cambiarPlan(slug, plan), 'Plan actualizado.')
               }
-            >
-              <SelectTrigger className="w-56">
-                <SelectValue placeholder="Sin plan asignado" />
-              </SelectTrigger>
-              <SelectContent>
-                {planes.map((p) => (
-                  <SelectItem key={p.key} value={p.key}>
-                    {p.label}
-                    {p.precio != null && ` — $${p.precio.toLocaleString('es-AR')}`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              opciones={planes.map((p) => ({
+                value: p.key,
+                label: `${p.label}${p.precio != null ? ` — $${p.precio.toLocaleString('es-AR')}` : ''}`,
+              }))}
+            />
           </div>
         )}
 
