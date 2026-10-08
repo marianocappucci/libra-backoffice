@@ -268,6 +268,104 @@ const SUSPENDIDA = {
   ...INSTANCIA, servicio_estado: 'suspendido', servicio_mensaje: 'Factura de agosto impaga',
 }
 
+// Los planes salen del motor (`/api/planes`): el desplegable es de datos y se busca escribiendo (libra-ui ADR-039, v0.129.0).
+const PLANES = [
+  { key: 'basico', label: 'Básico', precio: 15000, modulos: [] },
+  { key: 'pro', label: 'Pro', precio: 28000.5, modulos: [] },
+  { key: 'full', label: 'Completo', precio: null, modulos: [] },
+]
+const conPlanes = (rutas: Record<string, (init: Init) => Promise<Response>> = {}) =>
+  conSesion({ '/api/planes': () => Promise.resolve(json(PLANES)), ...rutas })
+
+describe('el plan de una instancia', () => {
+  it('se cambia buscando por letras, y el campo muestra el plan actual con su precio', async () => {
+    conPlanes({
+      'PUT /api/instancias/acme/plan': () => Promise.resolve(json({ ...INSTANCIA, plan: 'full' })),
+    })
+    const u = usuario()
+    montar('/instancias/acme')
+
+    const plan = await screen.findByRole('combobox', { name: 'Plan' })
+    await waitFor(() => expect(plan).toHaveValue('Pro — $28.000,5'))
+    await u.click(plan)
+    await u.keyboard('{Control>}a{/Control}comp')
+    expect((await screen.findAllByRole('option')).map((o) => o.textContent)).toEqual(['Completo'])
+    await u.keyboard('{Enter}')
+
+    await waitFor(() => {
+      const put = fetchMock.mock.calls.find((c) => String(c[0]).endsWith('/acme/plan'))
+      expect(put).toBeDefined()
+      expect(cuerpoDe(put!)).toEqual({ plan: 'full' })
+    })
+  })
+
+  it('no hay forma de vaciar el plan desde el campo: elegir es cambiarlo, y «sin plan» no es un plan', async () => {
+    conPlanes()
+    montar('/instancias/acme')
+    const plan = await screen.findByRole('combobox', { name: 'Plan' })
+    await waitFor(() => expect(plan).toHaveValue('Pro — $28.000,5'))
+    expect(screen.queryByRole('button', { name: 'Quitar la selección' })).not.toBeInTheDocument()
+  })
+
+  it('en el alta se elige escribiendo y viaja la clave del plan', async () => {
+    conPlanes()
+    const u = await abrirAlta()
+    await completarLoMinimo(u)
+
+    const plan = screen.getByLabelText('Plan')
+    expect(plan).toHaveValue('')
+    await u.click(plan)
+    await u.keyboard('pro{Enter}')
+    expect(plan).toHaveValue('Pro — $28.000,5')
+    await u.click(screen.getByRole('button', { name: /crear instancia/i }))
+
+    await waitFor(() => {
+      const alta = fetchMock.mock.calls.find(
+        (c) => String(c[0]).endsWith('/api/instancias') && (c[1] as Init)?.method === 'POST',
+      )
+      expect(alta).toBeDefined()
+      expect(cuerpoDe(alta!).plan).toBe('pro')
+    })
+  })
+
+  it('en el alta el plan es opcional: se puede quitar con la × y entonces no se manda ninguno', async () => {
+    conPlanes()
+    const u = await abrirAlta()
+    await completarLoMinimo(u)
+
+    const plan = screen.getByLabelText('Plan')
+    await u.click(plan)
+    await u.keyboard('pro{Enter}')
+    expect(plan).toHaveValue('Pro — $28.000,5')
+    await u.click(screen.getByRole('button', { name: 'Quitar la selección' }))
+    expect(plan).toHaveValue('')
+    await u.click(screen.getByRole('button', { name: /crear instancia/i }))
+
+    await waitFor(() => {
+      const alta = fetchMock.mock.calls.find(
+        (c) => String(c[0]).endsWith('/api/instancias') && (c[1] as Init)?.method === 'POST',
+      )
+      expect(alta).toBeDefined()
+      expect(cuerpoDe(alta!)).not.toHaveProperty('plan')
+    })
+  })
+
+  it('en el alta, sin elegir plan no se manda ninguno (el motor pone el Básico)', async () => {
+    conPlanes()
+    const u = await abrirAlta()
+    await completarLoMinimo(u)
+    await u.click(screen.getByRole('button', { name: /crear instancia/i }))
+
+    await waitFor(() => {
+      const alta = fetchMock.mock.calls.find(
+        (c) => String(c[0]).endsWith('/api/instancias') && (c[1] as Init)?.method === 'POST',
+      )
+      expect(alta).toBeDefined()
+      expect(cuerpoDe(alta!)).not.toHaveProperty('plan')
+    })
+  })
+})
+
 describe('corte de servicio', () => {
   it('suspende con el mensaje que se escribió', async () => {
     conSesion({

@@ -66,6 +66,7 @@ export function EstadoServicio({ instancia, ocupado, onAplicar }: Props) {
       <CardContent className="grid max-w-xl gap-4">
         <div className="grid gap-2">
           <Label htmlFor="servicio-estado">Estado</Label>
+          {/* select-cerrado: los estados del servicio son tres (activo, pausado, suspendido), una constante del código (OPCIONES_SERVICIO) */}
           <Select
             value={estado}
             disabled={ocupado}
