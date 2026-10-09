@@ -49,15 +49,15 @@ describe('Apariencia', () => {
   it('arma una fila por cada color del kit, con su ayuda, y todos arrancan «de siempre»', async () => {
     // Sin producto (un backend viejo que no lo manda): lo que depende del producto (acento e ítem activo) queda vacío y se dice «el de cada
     // producto»; nunca el verde. La vista previa usa entonces los neutros del kit. La barra lateral ya no depende del producto (ADR-042 del kit):
-    // su defecto es el de `libra-ui/tema.css`, `#ebebeb`.
+    // su defecto es el de `libra-ui/tema.css`, el grafito `#1c1e22` (ADR-043).
     montar()
     expect(await screen.findByLabelText('Ítem activo del menú: fondo')).toHaveValue('')
-    expect(screen.getByLabelText('Ítem activo del menú: borde')).toHaveValue('')
+    expect(screen.getByLabelText('Ítem activo del menú: franja')).toHaveValue('')
     // El éxito y la franja del POS tienen valor de siempre.
     expect(screen.getByLabelText('Color de éxito')).toHaveValue('#059669')
     expect(screen.getByLabelText('Encabezado del POS: inicio')).toHaveValue('#0284c7')
     expect(screen.getByLabelText('Acento principal')).toHaveValue('')
-    expect(screen.getByLabelText('Barra lateral: fondo')).toHaveValue('#ebebeb')
+    expect(screen.getByLabelText('Barra lateral: fondo')).toHaveValue('#1c1e22')
     expect(screen.getAllByText('De siempre')).toHaveLength(4)
     expect(screen.getAllByText('El de cada producto')).toHaveLength(3)
   })
@@ -66,9 +66,9 @@ describe('Apariencia', () => {
     montar({ producto: 'contalibra' })
     const d = defectosDelProducto('contalibra')
     expect(await screen.findByLabelText('Ítem activo del menú: fondo')).toHaveValue(d.menuActivoFondo)
-    expect(screen.getByLabelText('Ítem activo del menú: borde')).toHaveValue(d.menuActivoBorde)
+    expect(screen.getByLabelText('Ítem activo del menú: franja')).toHaveValue(d.menuActivoBorde)
     expect(screen.getByLabelText('Acento principal')).toHaveValue(IDENTIDAD.contalibra.colorAccion)
-    expect(screen.getByLabelText('Barra lateral: fondo')).toHaveValue('#ebebeb')
+    expect(screen.getByLabelText('Barra lateral: fondo')).toHaveValue('#1c1e22')
     expect(d.menuActivoFondo).not.toBe('#ecfdf5')
     expect(screen.getAllByText('De siempre')).toHaveLength(7)
     expect(screen.queryByText('El de cada producto')).toBeNull()
@@ -96,8 +96,8 @@ describe('Apariencia', () => {
     montar()
     await screen.findByLabelText('Acento principal')
     const activo = within(screen.getByLabelText('Vista previa')).getAllByText('Ítem activo')[0]
-    expect(activo).toHaveStyle({ backgroundColor: '#f5f5f5' })
-    expect(activo.style.boxShadow).toContain('#d4d4d4')
+    expect(activo).toHaveStyle({ backgroundColor: '#2c2f35' })
+    expect(activo.style.boxShadow).toContain('#a1a1aa')
     expect(activo.style.boxShadow).not.toContain('#5ee9b5')
   })
 
@@ -154,7 +154,7 @@ describe('Apariencia', () => {
   it('un color que no es un color apaga el guardado y lo dice', async () => {
     const user = userEvent.setup()
     const llamadas = montar()
-    const borde = await screen.findByLabelText('Ítem activo del menú: borde')
+    const borde = await screen.findByLabelText('Ítem activo del menú: franja')
     await user.clear(borde)
     await user.type(borde, 'verde')
     expect(await screen.findByRole('alert')).toHaveTextContent(/no es un color/)
