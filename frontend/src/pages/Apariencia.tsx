@@ -71,7 +71,7 @@ function Vista({ c, producto }: { c: ColoresDeVista; producto: Producto | null }
   const item = (activo: boolean, nombre: string, texto: string) => (
     <div
       className="rounded-md px-3 py-2 text-sm"
-      style={activo ? { backgroundColor: fondoItem, color: textoItem, boxShadow: `inset 0 0 0 1px ${bordeItem}` } : { color: texto }}
+      style={activo ? { backgroundColor: fondoItem, color: textoItem, boxShadow: `inset 3px 0 0 ${bordeItem}` } : { color: texto }}
     >
       {nombre}
     </div>
