@@ -64,6 +64,9 @@ class Settings:
     # de cada instancia los publica (`libracore.tema_router`, ADR-012; es la misma en los seis productos).
     tema_path: Path = Path("/var/lib/libra-backoffice/tema.json")
     tema_instancia_path: str = "/api/tema"
+    # Las sucursales contratadas de la instancia (`libracore.limites`, ADR-041): se lee y se carga acá. La misma ruta en todos los productos que
+    # cobran por sucursal (hoy VentaLibra).
+    limites_instancia_path: str = "/api/limites/sucursales"
     service_token: str = ""
     timeout_instancia: float = 5.0
     # Vocabulario de roles de ESTE producto — no es el mismo en toda la
@@ -188,6 +191,7 @@ def cargar_settings(env: dict | None = None) -> Settings:
         health_path=(env.get("HEALTH_PATH") or "/health").strip(),
         tema_path=_ruta_del_tema(env),
         tema_instancia_path=(env.get("TEMA_INSTANCIA_PATH") or "/api/tema").strip(),
+        limites_instancia_path=(env.get("LIMITES_INSTANCIA_PATH") or "/api/limites/sucursales").strip(),
         service_token=token,
         timeout_instancia=float(env.get("TIMEOUT_INSTANCIA") or 5.0),
         usuarios_roles=_leer_roles(env.get("USERS_ROLES", "")),
