@@ -48,6 +48,8 @@ const VACIO = {
   nombre: '', slug: '', domain: '', port: '',
   empresa_nombre: '', empresa_cuit: '', sin_identidad: false,
   admin_user: 'admin', admin_password: '', plan: '', setup_npm: true,
+  // Texto, como `port`: el campo vacío tiene que poder existir. Default 1 (la sucursal incluida en el plan) cuando el plan la cobra de más.
+  sucursales_contratadas: '1',
 }
 
 export function AltaInstancia({ planes, slugsPrevios, recargar }: Props) {
@@ -57,6 +59,14 @@ export function AltaInstancia({ planes, slugsPrevios, recargar }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [huerfana, setHuerfana] = useState<string | null>(null)
   const [creada, setCreada] = useState<InstanciaCreada | null>(null)
+
+  // El plan que el motor va a aplicar: el elegido, o —sin elegir— el que resuelve `basico` (el default del alta). Un producto con un plan
+  // solo (VentaLibra) lo resuelve a ese. Si cobra sucursales adicionales, el alta pide cuántas contrata el cliente.
+  const planEfectivo = planes.find((p) => p.key === (campos.plan || 'basico')) ?? (planes.length === 1 ? planes[0] : undefined)
+  const pideSucursales = Boolean(planEfectivo?.adicional)
+  const sucursalesNumero = Number(campos.sucursales_contratadas)
+  const sucursalesValidas =
+    campos.sucursales_contratadas.trim() !== '' && Number.isInteger(sucursalesNumero) && sucursalesNumero >= 1
 
   function set<K extends keyof typeof VACIO>(campo: K, valor: (typeof VACIO)[K]) {
     setCampos((c) => ({ ...c, [campo]: valor }))
@@ -94,6 +104,8 @@ export function AltaInstancia({ planes, slugsPrevios, recargar }: Props) {
     // se separa es siempre la de la pantalla.
     if (campos.sin_identidad) datos.sin_identidad = true
     datos.setup_npm = campos.setup_npm
+    // Sólo con un plan que cobra sucursales: para los demás el backend lo rechazaría (422).
+    if (pideSucursales) datos.sucursales_contratadas = sucursalesNumero
 
     try {
       setCreada(await backoffice.crear(datos))
@@ -262,6 +274,24 @@ export function AltaInstancia({ planes, slugsPrevios, recargar }: Props) {
               </div>
             )}
 
+            {pideSucursales && planEfectivo?.adicional && (
+              <div className="grid gap-2">
+                <Label htmlFor="alta-sucursales">Sucursales contratadas</Label>
+                <Input
+                  id="alta-sucursales"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={campos.sucursales_contratadas}
+                  onChange={(e) => set('sucursales_contratadas', e.target.value)}
+                />
+                <p className="text-sm text-muted-foreground">
+                  El plan incluye {planEfectivo.adicional.incluidas}; cada una más suma ${planEfectivo.adicional.precio.toLocaleString('es-AR')}{' '}
+                  por mes (IVA incluido). La instancia no deja dar de alta más de las contratadas.
+                </p>
+              </div>
+            )}
+
             {error && <p className="text-sm font-medium text-destructive">{error}</p>}
             {huerfana && (
               <p className="rounded-md border border-destructive/50 p-3 text-sm">
@@ -281,7 +311,8 @@ export function AltaInstancia({ planes, slugsPrevios, recargar }: Props) {
                 disabled={
                   creando ||
                   !campos.nombre.trim() ||
-                  (!campos.sin_identidad && !campos.empresa_cuit.trim())
+                  (!campos.sin_identidad && !campos.empresa_cuit.trim()) ||
+                  (pideSucursales && !sucursalesValidas)
                 }
               >
                 {creando ? 'Creando…' : 'Crear instancia'}

@@ -54,6 +54,8 @@ export type AltaIn = {
   /** Opt-in para las demos, que no tienen CUIT. */
   sin_identidad?: boolean
   setup_npm?: boolean
+  /** Sucursales que el cliente contrata. Sólo para los planes con `adicional`; la instancia nace con ese tope. Sin mandarlo, queda sin límite. */
+  sucursales_contratadas?: number
 }
 
 // Lo que devuelve el alta, que **no** es una `Instancia`: trae `admin_user` y
@@ -85,11 +87,47 @@ export type Baja = {
   npm: boolean | null
 }
 
+/** Lo que un plan cobra de más por cada unidad que excede las incluidas (hoy: la sucursal adicional de VentaLibra). `null`/ausente = no cobra. */
+export type PlanAdicional = { unidad: string; incluidas: number; precio: number }
+
 export type Plan = {
   key: string
   label: string
   precio: number | null
   modulos: string[]
+  adicional?: PlanAdicional | null
+}
+
+/** El cálculo del abono (`libracore.abono.calcular_abono`). `contratadas: null` = sin dato cargado: el total es sólo la base. */
+export type AbonoCalculado = {
+  contratadas: number | null
+  incluidas: number
+  base: number
+  adicionales: number
+  precio_adicional: number
+  extra: number
+  total: number
+}
+
+/**
+ * `GET /api/instancias/{slug}/abono`. Siempre llega con un `estado` (200): `ok`, `no_aplica` (el plan no cobra sucursales adicionales),
+ * `detenida`, `inalcanzable`, `sin_soporte` (la instancia tiene una libracore vieja: hay que actualizarla) o `error`. Con cualquiera que no
+ * sea `ok`, `contratadas`, `activas` y `abono` son `null`. `contratadas: null` con `ok` es «Sin cargar».
+ */
+export type Abono = {
+  slug: string
+  plan: string
+  aplica: boolean
+  estado: 'ok' | 'no_aplica' | 'detenida' | 'inalcanzable' | 'sin_soporte' | 'error'
+  detalle: string
+  plan_label?: string
+  unidad?: string
+  incluidas?: number
+  precio_base?: number
+  precio_adicional?: number
+  contratadas?: number | null
+  activas?: number | null
+  abono?: AbonoCalculado | null
 }
 
 export type EstadoInstancia = {
@@ -201,6 +239,10 @@ export const backoffice = {
     api.put<Instancia>(`/api/instancias/${slug}`, datos),
   cambiarPlan: (slug: string, plan: string) =>
     api.put<Instancia>(`/api/instancias/${slug}/plan`, { plan }),
+  // El abono: precio del plan + sucursales adicionales CONTRATADAS (que viven en la instancia). El `PUT` con `null` quita el dato.
+  abono: (slug: string) => api.get<Abono>(`/api/instancias/${slug}/abono`),
+  cargarSucursales: (slug: string, contratadas: number | null) =>
+    api.put<Abono>(`/api/instancias/${slug}/sucursales`, { contratadas }),
   // Add-ons (módulos sueltos, fuera de los planes). `{}` si el producto no tiene.
   //
   // 🔑 El valor es `boolean | null`, y `null` es **"no se pudo leer"**, no

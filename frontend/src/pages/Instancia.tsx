@@ -29,6 +29,7 @@ import { EstadoServicio } from '../components/EstadoServicio'
 import { Pestanas } from '../components/Pestanas'
 import { CodigosDemo } from '../components/CodigosDemo'
 import { ReenvioCorreo } from '../components/ReenvioCorreo'
+import { SucursalesContratadas } from '../components/SucursalesContratadas'
 import {
   ApiError, backoffice, rutaCodigosDemo, rutaSmtp, rutaUsuarios,
   type Instancia as TInstancia, type Plan, type RolUsuario,
@@ -220,6 +221,11 @@ export function Instancia() {
               }))}
             />
           </div>
+        )}
+
+        {/* Sólo si algún plan del producto cobra unidades de más (hoy VentaLibra: sucursales adicionales). Los otros productos no ven nada. */}
+        {planes.some((p) => p.adicional) && (
+          <SucursalesContratadas slug={slug} plan={instancia.plan} deshabilitado={ocupado} />
         )}
 
         {Object.keys(addons).length > 0 && (

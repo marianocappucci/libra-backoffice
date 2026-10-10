@@ -11,8 +11,12 @@ Los seis productos tienen esos scripts y se administran igual, así que este
 router no tiene ninguna rama por producto.
 """
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from libracore.abono import calcular_abono
+from libracore.limites import MAXIMO as MAXIMO_DE_SUCURSALES
+from libracore.validacion import sin_booleanos
+from pydantic import BaseModel, Field
 
+from ..cliente_instancia import InstanciaInalcanzable, RespuestaDeInstancia
 from ..deps import admin_actual, requiere_feature
 from ..inventario import InstanciaDesconocida
 from . import apariencia
@@ -62,6 +66,19 @@ class InstanciaIn(BaseModel):
     # agrupar por razón social en el panel del dueño.
     sin_identidad: bool = False
     setup_npm: bool = True
+    # Sucursales que el cliente contrata (ADR-041 de libracore). Sólo para los planes que cobran sucursales adicionales (los que declaran
+    # `adicional` en `GET /api/planes`); la instancia NACE con el tope en su `config.json`. `None` = no cargarlo: queda sin límite.
+    sucursales_contratadas: int | None = Field(default=None, ge=1, le=MAXIMO_DE_SUCURSALES)
+
+    _no_son_booleanos = sin_booleanos("sucursales_contratadas")
+
+
+class SucursalesIn(BaseModel):
+    """Las sucursales contratadas de una instancia. `null` quita el dato: la instancia queda sin límite («Sin cargar»)."""
+
+    contratadas: int | None = Field(..., ge=1, le=MAXIMO_DE_SUCURSALES)
+
+    _no_son_booleanos = sin_booleanos("contratadas")
 
 
 class InstanciaEdit(BaseModel):
@@ -151,6 +168,10 @@ def detalle(slug: str, request: Request):
 @router.post("/instancias", status_code=201, response_model=InstanciaCreada)
 def crear(datos: InstanciaIn, request: Request):
     servicios = _servicios(request)
+    if datos.sucursales_contratadas is not None and not (_plan_de(servicios, datos.plan) or {}).get("adicional"):
+        raise HTTPException(
+            422, f"El plan {datos.plan!r} no cobra sucursales adicionales: no corresponde cargar sucursales contratadas."
+        )
     try:
         creada = servicios.crear_cliente(**datos.model_dump())
         # El tema de la suite (feature `apariencia`) llega a la instancia nueva. Mejor esfuerzo: nunca hace fallar el alta.
@@ -262,3 +283,97 @@ def baja(slug: str, datos: BajaIn, request: Request):
 @router.get("/planes")
 def planes(request: Request):
     return _servicios(request).planes_info()
+
+
+# ── El abono: precio del plan + sucursales adicionales CONTRATADAS (ADR-041 de libracore, ADR-073 de VentaLibra) ──
+#
+# La cantidad contratada vive en la INSTANCIA (`libracore.limites`): es lo que le permite bloquear un alta sin salir de su proceso. Este router
+# se la pide con el token de servicio y calcula con `calcular_abono`; no guarda nada propio. Sólo para los planes que declaran `adicional` en
+# `planes_info()`: en los demás productos todo esto contesta «no aplica» y la pantalla no muestra nada.
+
+_SIN_SOPORTE = (
+    "La instancia todavía no expone las sucursales contratadas (libracore anterior a v1.153.0): hay que actualizarla."
+)
+
+
+def _plan_de(servicios, clave: str) -> dict | None:
+    """El plan de `planes_info()` que rige para `clave`, que es lo que dice el `cliente.json`: un plan retirado se resuelve a su reemplazo
+    (`services.plan_vigente`, de libracore v1.153.0; sin él, el nombre tal cual)."""
+    resolver = getattr(servicios, "plan_vigente", None)
+    vigente = resolver(clave) if resolver else clave
+    return next((p for p in servicios.planes_info() if p.get("key") == vigente), None)
+
+
+def _sin_soporte(exc: RespuestaDeInstancia) -> bool:
+    # 404/405: la ruta no existe (el fallback de la SPA sólo sirve GET). «no es JSON»: el fallback contestó 200 con HTML.
+    return exc.status_code in (404, 405) or "no es JSON" in exc.detalle
+
+
+def _abono_de(instancia, plan: dict, *, contratadas: int | None, activas: int | None) -> dict:
+    adicional = plan["adicional"]
+    return {
+        "slug": instancia.slug, "plan": plan["key"], "plan_label": plan.get("label", plan["key"]), "aplica": True, "estado": "ok", "detalle": "",
+        "unidad": adicional["unidad"], "incluidas": adicional["incluidas"],
+        "precio_base": plan["precio"], "precio_adicional": adicional["precio"],
+        "contratadas": contratadas, "activas": activas,
+        "abono": calcular_abono(plan["precio"], adicional["incluidas"], adicional["precio"], contratadas),
+    }
+
+
+def _sin_abono(instancia, plan: dict, estado: str, detalle: str) -> dict:
+    """La instancia no pudo contestar: se sabe el precio del plan, no lo contratado. Sin `abono`: calcularlo con `contratadas=None` diría
+    «sólo la base», que es un dato que NO tenemos."""
+    adicional = plan["adicional"]
+    return {
+        "slug": instancia.slug, "plan": plan["key"], "plan_label": plan.get("label", plan["key"]), "aplica": True, "estado": estado, "detalle": detalle,
+        "unidad": adicional["unidad"], "incluidas": adicional["incluidas"],
+        "precio_base": plan["precio"], "precio_adicional": adicional["precio"],
+        "contratadas": None, "activas": None, "abono": None,
+    }
+
+
+@router.get("/instancias/{slug}/abono")
+async def abono(slug: str, request: Request):
+    """Plan, precios, `contratadas` y `activas` de la instancia, y el abono (`calcular_abono`).
+
+    Siempre 200 con un `estado`, para que la pantalla muestre el motivo sin romperse: `ok`; `no_aplica` (el plan no cobra sucursales
+    adicionales); `detenida` (el contenedor no corre); `inalcanzable` (corre y no contesta); `sin_soporte` (contesta, pero su libracore no tiene
+    el endpoint: hay que actualizarla); `error`. `contratadas: null` en `ok` es «Sin cargar»."""
+    instancia = _obtener(request, slug)
+    plan = _plan_de(_servicios(request), instancia.plan)
+    if not plan or not plan.get("adicional"):
+        return {"slug": slug, "plan": instancia.plan, "aplica": False, "estado": "no_aplica", "detalle": ""}
+    if instancia.estado != "running":
+        return _sin_abono(instancia, plan, "detenida", "El contenedor no está corriendo.")
+    try:
+        respuesta = await request.app.state.cliente_instancia.pedir(
+            "GET", instancia, request.app.state.settings.limites_instancia_path)
+    except InstanciaInalcanzable as exc:
+        return _sin_abono(instancia, plan, "inalcanzable", exc.detalle)
+    except RespuestaDeInstancia as exc:
+        if _sin_soporte(exc):
+            return _sin_abono(instancia, plan, "sin_soporte", _SIN_SOPORTE)
+        return _sin_abono(instancia, plan, "error", exc.detalle)
+    return _abono_de(instancia, plan, contratadas=respuesta.get("contratadas"), activas=respuesta.get("activas"))
+
+
+@router.put("/instancias/{slug}/sucursales")
+async def cargar_sucursales(slug: str, datos: SucursalesIn, request: Request):
+    """Carga (o quita, con `null`) las sucursales contratadas en la instancia y devuelve el abono resultante, igual que `GET .../abono`.
+
+    A diferencia del `GET`, acá un fallo SÍ es un error HTTP: guardar que no se guardó no puede salir como 200. 502 si la instancia no
+    contesta; 409 si no expone el endpoint (hay que actualizarla); el 422 de la instancia llega como 422."""
+    instancia = _obtener(request, slug)
+    plan = _plan_de(_servicios(request), instancia.plan)
+    if not plan or not plan.get("adicional"):
+        raise HTTPException(422, f"El plan {instancia.plan!r} no cobra sucursales adicionales: no hay nada que cargar.")
+    try:
+        respuesta = await request.app.state.cliente_instancia.pedir(
+            "PUT", instancia, request.app.state.settings.limites_instancia_path, json={"contratadas": datos.contratadas})
+    except InstanciaInalcanzable as exc:
+        raise HTTPException(502, str(exc))
+    except RespuestaDeInstancia as exc:
+        if _sin_soporte(exc):
+            raise HTTPException(409, _SIN_SOPORTE)
+        raise HTTPException(exc.status_code, exc.detalle)
+    return _abono_de(instancia, plan, contratadas=respuesta.get("contratadas"), activas=respuesta.get("activas"))
