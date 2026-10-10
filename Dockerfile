@@ -36,6 +36,13 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     UV_LINK_MODE=copy \
     PATH="/opt/venv/bin:$PATH"
 
+# La hora de Argentina, como los contenedores de los productos (2026-10-10). El backoffice corre adentro los
+# `panel_admin.py`/`nuevo_cliente.py` de cada producto, que usan `datetime.now()` para el nombre de la versión
+# desplegada, el `desplegado_at` de `cliente.json` y los nombres de los respaldos: sin esta variable salían en UTC,
+# tres horas adelantados respecto de lo que escribe el mismo script corrido desde el servidor. La imagen base ya trae
+# `tzdata`, así que alcanza con la variable.
+ENV TZ=America/Argentina/Buenos_Aires
+
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client curl ca-certificates gnupg && rm -rf /var/lib/apt/lists/*
