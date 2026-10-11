@@ -82,7 +82,7 @@ class _ReenvioCorreoIn(BaseModel):
     destino: str | None = None
 
 
-def construir_instancia_falsa(db_path, *, es_demo=False, roles=("staff", "admin"), con_tema=True):
+def construir_instancia_falsa(db_path, *, es_demo=False, roles=("staff", "admin"), con_tema=True, sucursales_activas=None):
     """Una instancia de producto: los routers de `libraauth` (SMTP, demo y
     ahora usuarios).
 
@@ -91,6 +91,11 @@ def construir_instancia_falsa(db_path, *, es_demo=False, roles=("staff", "admin"
     hacen falta**: sin la que NO es demo, un proxy que devolviera lo mismo para
     cualquier instancia pasaría en verde, y ahí es donde se le muestran los
     códigos de la demo a quien abrió la ficha de un cliente.
+
+    `sucursales_activas` (un `callable` que devuelve cuántas hay) monta el router REAL de `libracore.limites` (ADR-041) con las guardas que le
+    pone VentaLibra: leer, admin o token de servicio; escribir, sólo el token. Sin él, la instancia no lo expone (otro producto o una libracore
+    anterior a v1.153.0). 🔴 El dato se guarda en el `config.json` de ESE proceso (`config_manager.CONFIG_PATH`), así que un test no puede
+    montar el router en dos instancias a la vez sin que compartan el número.
 
     `roles` es el vocabulario de ESTA instancia (`("admin", "operador",
     "cajero")` en Contalibra, por ejemplo) — lo valida `build_users_router`,
@@ -145,6 +150,19 @@ def construir_instancia_falsa(db_path, *, es_demo=False, roles=("staff", "admin"
         return {"destino": app.state.reenvio_correo}
 
     app.include_router(reenvio_correo)
+
+    if sucursales_activas is not None:
+        from fastapi import HTTPException, Request
+        from libracore.limites import build_limites_router
+        from libraauth.session_auth import token_de_servicio_valido
+
+        def solo_servicio(request: Request):
+            if not token_de_servicio_valido(request):
+                raise HTTPException(401 if not request.cookies else 403, "forbidden")
+
+        app.include_router(build_limites_router(
+            guard_lectura=json_api_require_admin_o_servicio, guard_escritura=solo_servicio, medir_activas=sucursales_activas,
+        ))
 
     if con_tema:
         # El contrato de `libracore.tema_router` (ADR-012): `GET /api/tema` público, `PUT /api/tema` del admin o del token de servicio;
