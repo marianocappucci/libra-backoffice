@@ -286,7 +286,7 @@ describe('el plan de una instancia', () => {
     montar('/instancias/acme')
 
     const plan = await screen.findByRole('combobox', { name: 'Plan' })
-    await waitFor(() => expect(plan).toHaveValue('Pro — $28.000,5'))
+    await waitFor(() => expect(plan).toHaveValue('Pro — $\u00a028.000,50'))
     await u.click(plan)
     await u.keyboard('{Control>}a{/Control}comp')
     expect((await screen.findAllByRole('option')).map((o) => o.textContent)).toEqual(['Completo'])
@@ -303,7 +303,7 @@ describe('el plan de una instancia', () => {
     conPlanes()
     montar('/instancias/acme')
     const plan = await screen.findByRole('combobox', { name: 'Plan' })
-    await waitFor(() => expect(plan).toHaveValue('Pro — $28.000,5'))
+    await waitFor(() => expect(plan).toHaveValue('Pro — $\u00a028.000,50'))
     expect(screen.queryByRole('button', { name: 'Quitar la selección' })).not.toBeInTheDocument()
   })
 
@@ -316,7 +316,7 @@ describe('el plan de una instancia', () => {
     expect(plan).toHaveValue('')
     await u.click(plan)
     await u.keyboard('pro{Enter}')
-    expect(plan).toHaveValue('Pro — $28.000,5')
+    expect(plan).toHaveValue('Pro — $\u00a028.000,50')
     await u.click(screen.getByRole('button', { name: /crear instancia/i }))
 
     await waitFor(() => {
@@ -336,7 +336,7 @@ describe('el plan de una instancia', () => {
     const plan = screen.getByLabelText('Plan')
     await u.click(plan)
     await u.keyboard('pro{Enter}')
-    expect(plan).toHaveValue('Pro — $28.000,5')
+    expect(plan).toHaveValue('Pro — $\u00a028.000,50')
     await u.click(screen.getByRole('button', { name: 'Quitar la selección' }))
     expect(plan).toHaveValue('')
     await u.click(screen.getByRole('button', { name: /crear instancia/i }))

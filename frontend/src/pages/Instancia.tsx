@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { SelectBuscable } from 'libra-ui/SelectBuscable'
+import { formatoMoneda } from 'libra-ui/formatos'
 import { variantePorEstado } from '@/lib/servicio'
 
 import { BajaInstancia } from '../components/BajaInstancia'
@@ -217,7 +218,7 @@ export function Instancia() {
               }
               opciones={planes.map((p) => ({
                 value: p.key,
-                label: `${p.label}${p.precio != null ? ` — $${p.precio.toLocaleString('es-AR')}` : ''}`,
+                label: `${p.label}${p.precio != null ? ` — ${formatoMoneda(p.precio)}` : ''}`,
               }))}
             />
           </div>
