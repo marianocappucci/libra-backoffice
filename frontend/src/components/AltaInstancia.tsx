@@ -32,6 +32,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { SelectBuscable } from 'libra-ui/SelectBuscable'
+import { formatoMoneda } from 'libra-ui/formatos'
 
 import { ApiError, backoffice, type AltaIn, type InstanciaCreada, type Plan } from '../api'
 
@@ -268,7 +269,7 @@ export function AltaInstancia({ planes, slugsPrevios, recargar }: Props) {
                   limpiable
                   opciones={planes.map((p) => ({
                     value: p.key,
-                    label: `${p.label}${p.precio != null ? ` — $${p.precio.toLocaleString('es-AR')}` : ''}`,
+                    label: `${p.label}${p.precio != null ? ` — ${formatoMoneda(p.precio)}` : ''}`,
                   }))}
                 />
               </div>
@@ -286,7 +287,7 @@ export function AltaInstancia({ planes, slugsPrevios, recargar }: Props) {
                   onChange={(e) => set('sucursales_contratadas', e.target.value)}
                 />
                 <p className="text-sm text-muted-foreground">
-                  El plan incluye {planEfectivo.adicional.incluidas}; cada una más suma ${planEfectivo.adicional.precio.toLocaleString('es-AR')}{' '}
+                  El plan incluye {planEfectivo.adicional.incluidas}; cada una más suma {formatoMoneda(planEfectivo.adicional.precio)}{' '}
                   por mes (IVA incluido). La instancia no deja dar de alta más de las contratadas.
                 </p>
               </div>

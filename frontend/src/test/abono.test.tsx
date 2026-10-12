@@ -1,4 +1,4 @@
-// Las sucursales contratadas y el abono (ADR-041 de libracore): la línea «Plan único $39.900 + N sucursales adicionales × $19.950 = $X», «Activas A
+// Las sucursales contratadas y el abono (ADR-041 de libracore): la línea «Plan único $ 39.900,00 + N sucursales adicionales × $ 19.950,00 = $ X», «Activas A
 // de C contratadas», el campo «Sucursales contratadas» con Guardar, y el mismo campo en el alta con default 1. Sólo para los planes que declaran
 // `adicional`: los demás productos no ven nada nuevo (ni una request).
 import { configure, render, screen, waitFor } from '@testing-library/react'
@@ -11,6 +11,10 @@ import { Instancia } from '../pages/Instancia'
 
 // La primera pantalla de la corrida paga el import de libra-ui: un segundo no alcanza en frío (pasa sola, falla en la suite).
 configure({ asyncUtilTimeout: 5000 })
+
+// El normalizador por defecto de Testing Library colapsa `\s+` a un espacio común, y el espacio duro de `Intl` es-AR (`$\u00a019.950,00`)
+// también es `\s`: con él un texto con el espacio duro nunca matchea. Se compara sin normalizar para fijar el formato exacto.
+const sinNormalizar = { normalizer: (t: string) => t }
 
 const INSTANCIA = {
   slug: 'acme', nombre: 'ACME SA', container: 'producto-acme',
@@ -76,7 +80,7 @@ describe('sucursales contratadas en la pantalla de una instancia', () => {
     montarInstancia([PLAN_UNICO], () => json(abono(2, 1)))
 
     expect(
-      await screen.findByText('Plan único $39.900 + 1 sucursal adicional × $19.950 = $59.850 (IVA incluido)'),
+      await screen.findByText('Plan único $\u00a039.900,00 + 1 sucursal adicional × $\u00a019.950,00 = $\u00a059.850,00 (IVA incluido)', sinNormalizar),
     ).toBeInTheDocument()
     expect(screen.getByText(/Activas 1 de 2 contratadas/)).toBeInTheDocument()
     expect(screen.getByLabelText('Sucursales contratadas')).toHaveValue(2)
@@ -85,7 +89,7 @@ describe('sucursales contratadas en la pantalla de una instancia', () => {
   it('con 3 contratadas dice «2 sucursales adicionales» en plural y suma 79.800', async () => {
     montarInstancia([PLAN_UNICO], () => json(abono(3, 2)))
     expect(
-      await screen.findByText('Plan único $39.900 + 2 sucursales adicionales × $19.950 = $79.800 (IVA incluido)'),
+      await screen.findByText('Plan único $\u00a039.900,00 + 2 sucursales adicionales × $\u00a019.950,00 = $\u00a079.800,00 (IVA incluido)', sinNormalizar),
     ).toBeInTheDocument()
   })
 
@@ -115,7 +119,7 @@ describe('sucursales contratadas en la pantalla de una instancia', () => {
       expect(JSON.parse(String((put![1] as Init)?.body))).toEqual({ contratadas: 3 })
     })
     expect(
-      await screen.findByText('Plan único $39.900 + 2 sucursales adicionales × $19.950 = $79.800 (IVA incluido)'),
+      await screen.findByText('Plan único $\u00a039.900,00 + 2 sucursales adicionales × $\u00a019.950,00 = $\u00a079.800,00 (IVA incluido)', sinNormalizar),
     ).toBeInTheDocument()
     expect(screen.getByText('Sucursales contratadas guardadas.')).toBeInTheDocument()
   })
@@ -252,7 +256,7 @@ describe('sucursales contratadas en el alta', () => {
   it('explica el precio de cada sucursal de más', async () => {
     montarAlta([PLAN_UNICO])
     await abrirYCompletar()
-    expect(screen.getByText(/cada una más suma \$19\.950 por mes \(IVA incluido\)/)).toBeInTheDocument()
+    expect(screen.getByText(/cada una más suma \$\u00a019\.950,00 por mes \(IVA incluido\)/, sinNormalizar)).toBeInTheDocument()
   })
 
   it('con el campo vacío o en 0 no deja crear', async () => {
