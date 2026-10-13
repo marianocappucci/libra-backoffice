@@ -41,7 +41,8 @@ dependencies = [
     # unico de usuarios de la familia, que este backoffice ya no puede volver
     # a hacer divergir.
     # v0.48.0 -> v0.49.0 (2026-10-12): `registrador_dbapi` y el formato del log en funciones puras (ADR-022). Sin migracion.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.49.0",
+    # v0.49.0 -> v0.50.0 (2026-10-13): varios procesos (ADR-023): `UsadosEnBase` para el captcha (tabla `libraauth_captcha_usados`, migracion `0003`) y `AdminAuth` con `flock` sobre el JSON de estado.
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.50.0",
     # `admin.services` (inventario y ciclo de vida de instancias) y
     # `security_headers`. v1.3.0: el alta ya no elige un puerto que otro
     # producto del host tiene bindeado, y hace rollback del directorio si el
@@ -164,7 +165,8 @@ dependencies = [
     # v1.153.0 -> v1.154.0 (2026-10-12): `libracore.cuit.solo_digitos` y se retira `cc_resumen` (codigo muerto, nadie lo usaba). Sin migracion.
     # v1.154.0 -> v1.155.0 (2026-10-12): migracion 0024 retira cc_resumenes_enviados y clients.cc_resumen_* (ADR-042). Desplegar el producto ANTES de migrar.
     # v1.155.0 -> v1.157.0 (2026-10-12): `libracore.auditoria` (ADR-043): las escrituras de clients avisan a un registrador, apagado si el producto no lo configura. v1.156.0 es un tag erroneo, no usar. Sin migracion.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.157.0",
+    # v1.157.0 -> v1.159.0 (2026-10-13): `libracore.candados` (ADR-044) y `libracore.errores` (ADR-045): registro de errores propio, una linea JSON por 500 en `errores.jsonl`. Sin migracion.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.159.0",
     "fastapi>=0.111,<1",
     "uvicorn[standard]>=0.30,<1",
     # El control plane le habla a cada instancia por HTTP.
