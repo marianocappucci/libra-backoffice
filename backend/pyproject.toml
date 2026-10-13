@@ -166,7 +166,8 @@ dependencies = [
     # v1.154.0 -> v1.155.0 (2026-10-12): migracion 0024 retira cc_resumenes_enviados y clients.cc_resumen_* (ADR-042). Desplegar el producto ANTES de migrar.
     # v1.155.0 -> v1.157.0 (2026-10-12): `libracore.auditoria` (ADR-043): las escrituras de clients avisan a un registrador, apagado si el producto no lo configura. v1.156.0 es un tag erroneo, no usar. Sin migracion.
     # v1.157.0 -> v1.159.0 (2026-10-13): `libracore.candados` (ADR-044) y `libracore.errores` (ADR-045): registro de errores propio, una linea JSON por 500 en `errores.jsonl`. Sin migracion.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.159.0",
+    # v1.159.0 -> v1.162.0 (2026-10-13): concepto sin «Factura» doble con migracion 0025 (corre al migrar, backup antes), alta por CLI con aviso de casilla y `panel_admin casilla`, se retira `get_cc_movimientos_periodo` y los adicionales quedan fuera de la escalera de planes (ADR-048, sin migracion).
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.162.0",
     "fastapi>=0.111,<1",
     "uvicorn[standard]>=0.30,<1",
     # El control plane le habla a cada instancia por HTTP.
