@@ -67,6 +67,8 @@ class Settings:
     # Las sucursales contratadas de la instancia (`libracore.limites`, ADR-041): se lee y se carga acá. La misma ruta en todos los productos que
     # cobran por sucursal (hoy VentaLibra).
     limites_instancia_path: str = "/api/limites/sucursales"
+    # Los adicionales fuera de la escalera (`libracore.adicionales_router`, ADR-048): el catálogo, lo contratado y lo usado de la instancia.
+    adicionales_instancia_path: str = "/api/adicionales"
     service_token: str = ""
     timeout_instancia: float = 5.0
     # Vocabulario de roles de ESTE producto — no es el mismo en toda la
@@ -192,6 +194,7 @@ def cargar_settings(env: dict | None = None) -> Settings:
         tema_path=_ruta_del_tema(env),
         tema_instancia_path=(env.get("TEMA_INSTANCIA_PATH") or "/api/tema").strip(),
         limites_instancia_path=(env.get("LIMITES_INSTANCIA_PATH") or "/api/limites/sucursales").strip(),
+        adicionales_instancia_path=(env.get("ADICIONALES_INSTANCIA_PATH") or "/api/adicionales").strip(),
         service_token=token,
         timeout_instancia=float(env.get("TIMEOUT_INSTANCIA") or 5.0),
         usuarios_roles=_leer_roles(env.get("USERS_ROLES", "")),
