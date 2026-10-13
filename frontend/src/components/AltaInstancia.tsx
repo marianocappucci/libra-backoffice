@@ -60,6 +60,7 @@ export function AltaInstancia({ planes, slugsPrevios, recargar }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [huerfana, setHuerfana] = useState<string | null>(null)
   const [creada, setCreada] = useState<InstanciaCreada | null>(null)
+  const [elegidos, setElegidos] = useState<Record<string, string | boolean>>({})
 
   // El plan que el motor va a aplicar: el elegido, o —sin elegir— el que resuelve `basico` (el default del alta). Un producto con un plan
   // solo (VentaLibra) lo resuelve a ese. Si cobra sucursales adicionales, el alta pide cuántas contrata el cliente.
@@ -68,6 +69,15 @@ export function AltaInstancia({ planes, slugsPrevios, recargar }: Props) {
   const sucursalesNumero = Number(campos.sucursales_contratadas)
   const sucursalesValidas =
     campos.sucursales_contratadas.trim() !== '' && Number.isInteger(sucursalesNumero) && sucursalesNumero >= 1
+
+  // Los adicionales fuera de la escalera que el plan admite (ADR-048 de libracore). La sucursal se pide arriba, con su propio campo y su default 1:
+  // acá no se repite. Texto para las cantidades (el campo vacío tiene que poder existir) y booleano para los sí/no; vacío o destildado = no se contrata.
+  const adicionalesDelPlan = (planEfectivo?.adicionales ?? []).filter((a) => !(pideSucursales && a.clave === planEfectivo?.adicional?.unidad))
+  const adicionalesInvalidos = adicionalesDelPlan.some((a) => {
+    const v = elegidos[a.clave]
+    if (!a.unidad || v === undefined || v === '' || v === false) return false
+    return !Number.isInteger(Number(v)) || Number(v) < 1
+  })
 
   function set<K extends keyof typeof VACIO>(campo: K, valor: (typeof VACIO)[K]) {
     setCampos((c) => ({ ...c, [campo]: valor }))
@@ -79,6 +89,7 @@ export function AltaInstancia({ planes, slugsPrevios, recargar }: Props) {
       // Cerrar el panel de credenciales las descarta: no hay dónde volver a
       // pedirlas. Se limpia recién acá, no al abrir, para que no parpadeen.
       setCampos({ ...VACIO })
+      setElegidos({})
       setError(null)
       setHuerfana(null)
       setCreada(null)
@@ -107,6 +118,17 @@ export function AltaInstancia({ planes, slugsPrevios, recargar }: Props) {
     datos.setup_npm = campos.setup_npm
     // Sólo con un plan que cobra sucursales: para los demás el backend lo rechazaría (422).
     if (pideSucursales) datos.sucursales_contratadas = sucursalesNumero
+    // Sólo los del plan efectivo (si se cambió de plan, lo elegido para otro se descarta) y sólo lo que se contrata.
+    const adicionales: Record<string, boolean | number> = {}
+    for (const a of adicionalesDelPlan) {
+      const v = elegidos[a.clave]
+      if (a.unidad) {
+        if (typeof v === 'string' && v.trim() !== '') adicionales[a.clave] = Number(v)
+      } else if (v === true) {
+        adicionales[a.clave] = true
+      }
+    }
+    if (Object.keys(adicionales).length > 0) datos.adicionales = adicionales
 
     try {
       setCreada(await backoffice.crear(datos))
@@ -293,6 +315,42 @@ export function AltaInstancia({ planes, slugsPrevios, recargar }: Props) {
               </div>
             )}
 
+            {adicionalesDelPlan.length > 0 && (
+              <div className="grid gap-2" data-testid="alta-adicionales">
+                <span className="text-sm font-medium">Adicionales</span>
+                {adicionalesDelPlan.map((a) =>
+                  a.unidad ? (
+                    <div key={a.clave} className="grid gap-1">
+                      <Label htmlFor={`alta-adicional-${a.clave}`}>
+                        {a.label} ({a.precio === null ? 'A cotizar' : formatoMoneda(a.precio)} por {a.unidad})
+                      </Label>
+                      <Input
+                        id={`alta-adicional-${a.clave}`}
+                        type="number"
+                        min={1}
+                        step={1}
+                        className="w-40"
+                        placeholder="Sin contratar"
+                        value={typeof elegidos[a.clave] === 'string' ? (elegidos[a.clave] as string) : ''}
+                        onChange={(e) => setElegidos((c) => ({ ...c, [a.clave]: e.target.value }))}
+                      />
+                    </div>
+                  ) : (
+                    <label key={a.clave} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={elegidos[a.clave] === true}
+                        onCheckedChange={(v) => setElegidos((c) => ({ ...c, [a.clave]: v === true }))}
+                      />
+                      {a.label} ({a.precio === null ? 'A cotizar' : formatoMoneda(a.precio)})
+                    </label>
+                  ),
+                )}
+                <p className="text-sm text-muted-foreground">
+                  Se contratan aparte del plan y no se pierden al cambiarlo. Lo que está a cotizar se acuerda por Anexo.
+                </p>
+              </div>
+            )}
+
             {error && <p className="text-sm font-medium text-destructive">{error}</p>}
             {huerfana && (
               <p className="rounded-md border border-destructive/50 p-3 text-sm">
@@ -313,7 +371,8 @@ export function AltaInstancia({ planes, slugsPrevios, recargar }: Props) {
                   creando ||
                   !campos.nombre.trim() ||
                   (!campos.sin_identidad && !campos.empresa_cuit.trim()) ||
-                  (pideSucursales && !sucursalesValidas)
+                  (pideSucursales && !sucursalesValidas) ||
+                  adicionalesInvalidos
                 }
               >
                 {creando ? 'Creando…' : 'Crear instancia'}

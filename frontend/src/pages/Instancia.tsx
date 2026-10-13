@@ -26,6 +26,7 @@ import { variantePorEstado } from '@/lib/servicio'
 
 import { BajaInstancia } from '../components/BajaInstancia'
 import { EditarInstancia } from '../components/EditarInstancia'
+import { Adicionales } from '../components/Adicionales'
 import { EstadoServicio } from '../components/EstadoServicio'
 import { Pestanas } from '../components/Pestanas'
 import { CodigosDemo } from '../components/CodigosDemo'
@@ -153,6 +154,8 @@ export function Instancia() {
     )
   }
 
+  const conAdicionales = planes.some((p) => (p.adicionales?.length ?? 0) > 0)
+
   const general = (
     <Card>
       <CardHeader>
@@ -224,12 +227,17 @@ export function Instancia() {
           </div>
         )}
 
+        {/* Los adicionales fuera de la escalera (ADR-048 de libracore): reemplazan a las sucursales y a los add-ons de abajo, que cubren (con
+            los mismos datos) lo que declaraba el producto antes. Un backend con libracore anterior a v1.162.0 no manda `adicionales` en los
+            planes y la pantalla sigue como siempre. */}
+        {conAdicionales && <Adicionales slug={slug} plan={instancia.plan} deshabilitado={ocupado} />}
+
         {/* Sólo si algún plan del producto cobra unidades de más (hoy VentaLibra: sucursales adicionales). Los otros productos no ven nada. */}
-        {planes.some((p) => p.adicional) && (
+        {!conAdicionales && planes.some((p) => p.adicional) && (
           <SucursalesContratadas slug={slug} plan={instancia.plan} deshabilitado={ocupado} />
         )}
 
-        {Object.keys(addons).length > 0 && (
+        {!conAdicionales && Object.keys(addons).length > 0 && (
           <div className="space-y-2">
             <span className="text-sm text-muted-foreground">Add-ons</span>
             <div className="flex flex-wrap gap-4">

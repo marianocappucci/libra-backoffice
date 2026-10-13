@@ -56,6 +56,8 @@ export type AltaIn = {
   setup_npm?: boolean
   /** Sucursales que el cliente contrata. Sólo para los planes con `adicional`; la instancia nace con ese tope. Sin mandarlo, queda sin límite. */
   sucursales_contratadas?: number
+  /** Adicionales fuera de la escalera (ADR-048 de libracore): `{clave: true | cantidad}` según `Plan.adicionales`. Sin mandarlo, ninguno. */
+  adicionales?: Record<string, boolean | number>
 }
 
 // Lo que devuelve el alta, que **no** es una `Instancia`: trae `admin_user` y
@@ -90,12 +92,80 @@ export type Baja = {
 /** Lo que un plan cobra de más por cada unidad que excede las incluidas (hoy: la sucursal adicional de VentaLibra). `null`/ausente = no cobra. */
 export type PlanAdicional = { unidad: string; incluidas: number; precio: number }
 
+/** Un adicional que se puede contratar con un plan (`GET /api/planes` → `adicionales`). `precio: null` = a cotizar. `unidad: null` = sí/no. */
+export type AdicionalDelPlan = {
+  clave: string
+  label: string
+  precio: number | null
+  unidad: string | null
+  /** Las unidades que ESE plan trae sin cargo. */
+  incluidas: number
+  limite: string | null
+  modulos: string[]
+}
+
 export type Plan = {
   key: string
   label: string
   precio: number | null
   modulos: string[]
   adicional?: PlanAdicional | null
+  /** Ausente en un backend con libracore anterior a v1.162.0: la pantalla cae a los add-ons y a las sucursales de siempre. */
+  adicionales?: AdicionalDelPlan[]
+}
+
+/** Un adicional de una instancia, con lo contratado y lo usado. `habilitado`/`cantidad: null` = no se pudo leer (no es «apagado»). */
+export type AdicionalDeInstancia = {
+  clave: string
+  label: string
+  precio: number | null
+  unidad: string | null
+  incluidas: number
+  limite: string | null
+  /** El plan de la instancia lo admite. Uno contratado que ya no cabe sigue apareciendo, para poder darlo de baja. */
+  compatible: boolean
+  habilitado: boolean | null
+  cantidad: number | null
+  usadas: number | null
+  /** Se puede cargar desde acá: una instancia vieja sólo deja prender y apagar los sí/no. */
+  editable: boolean
+}
+
+/** Una línea del Anexo I: un adicional contratado que cobra algo. `precio`/`subtotal: null` + `a_cotizar` = todavía sin precio. */
+export type LineaDeAbono = {
+  clave: string
+  label: string
+  unidad: string | null
+  cantidad: number
+  incluidas: number
+  cobrables: number
+  precio: number | null
+  subtotal: number | null
+  a_cotizar: boolean
+}
+
+export type AbonoPorLineas = {
+  plan: string
+  base: number | null
+  lineas: LineaDeAbono[]
+  extra: number
+  total: number | null
+  /** Las claves de las líneas que todavía no tienen precio: el total las deja afuera. */
+  a_cotizar: string[]
+}
+
+/**
+ * `GET /api/instancias/{slug}/adicionales`. Siempre 200 con un `estado`: `ok`, `no_aplica` (el producto no tiene adicionales), `detenida`,
+ * `inalcanzable`, `sin_soporte` (la instancia tiene una libracore anterior a v1.162.0: sólo se prenden y apagan los sí/no) o `error`.
+ * `abono: null` si no se pudo leer todo.
+ */
+export type Adicionales = {
+  slug: string
+  plan: string
+  estado: 'ok' | 'no_aplica' | 'detenida' | 'inalcanzable' | 'sin_soporte' | 'error'
+  detalle: string
+  adicionales: AdicionalDeInstancia[]
+  abono: AbonoPorLineas | null
 }
 
 /** El cálculo del abono (`libracore.abono.calcular_abono`). `contratadas: null` = sin dato cargado: el total es sólo la base. */
@@ -243,6 +313,11 @@ export const backoffice = {
   abono: (slug: string) => api.get<Abono>(`/api/instancias/${slug}/abono`),
   cargarSucursales: (slug: string, contratadas: number | null) =>
     api.put<Abono>(`/api/instancias/${slug}/sucursales`, { contratadas }),
+  // Los adicionales fuera de la escalera (ADR-048): el catálogo del plan con lo contratado y lo usado, y el abono por líneas. Cargar es `{habilitado}`
+  // (sí/no) o `{cantidad}` (por unidades); `null` es la baja.
+  adicionales: (slug: string) => api.get<Adicionales>(`/api/instancias/${slug}/adicionales`),
+  cargarAdicional: (slug: string, clave: string, cuerpo: { habilitado: boolean | null } | { cantidad: number | null }) =>
+    api.put<Adicionales>(`/api/instancias/${slug}/adicionales/${clave}`, cuerpo),
   // Add-ons (módulos sueltos, fuera de los planes). `{}` si el producto no tiene.
   //
   // 🔑 El valor es `boolean | null`, y `null` es **"no se pudo leer"**, no
