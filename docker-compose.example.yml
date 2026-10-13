@@ -72,6 +72,22 @@ services:
       # y sobrevive al reinicio del contenedor. Va en un volumen propio (abajo)
       # y no en el checkout del producto, que es de git.
       - ADMIN_PANEL_ESTADO_PATH=/var/lib/libra-backoffice/login.json
+      # Procesos de uvicorn (el CMD de la imagen lo pasa a `--workers`). Se queda en 1: este backoffice no tiene base
+      # propia, asi que el captcha del login anota los desafios usados EN MEMORIA y con N workers un desafio resuelto
+      # serviria N veces. El estado del login (`ADMIN_PANEL_ESTADO_PATH`) ya es seguro entre procesos (libraauth
+      # v0.50.0, `flock`). Ver "Varios procesos" en el README antes de subirlo.
+      - WEB_CONCURRENCY=${WEB_CONCURRENCY:-1}
+      # Registro de errores de la familia (ADR-045 de libracore): una linea JSON por cada 500 en
+      # `$LIBRA_ERRORES_DIR/errores.jsonl`, que lee el vigia del host (`operaciones/vigilar_errores.py`).
+      # Va DENTRO del volumen `estado` (ya persistente), en una subcarpeta `errores/`: en el host queda en
+      # `/var/lib/docker/volumes/<proyecto>_estado/_data/errores/errores.jsonl`, que es lo que busca el glob por
+      # defecto del vigia. Sin volumen, cada recreate del contenedor lo borra.
+      - LIBRA_ERRORES_DIR=/var/lib/libra-backoffice/errores
+      # `cliente` (aviso por Telegram en la primera aparicion de cada firma) | `demo` | `dev` (resumen diario).
+      - LIBRA_ENTORNO=cliente
+      # El nombre del contenedor (el mismo `container_name` de arriba): distingue los ocho backoffices, que comparten
+      # producto `libra-backoffice`. `LIBRA_VERSION` (el release) sale del tag de la imagen, via `APP_VERSION`.
+      - LIBRA_INSTANCIA=gestiolibra-admin
       # El segundo factor NO va acá: `ADMIN_PANEL_TOTP_SECRET` es un secreto y
       # vive en /etc/<producto>-admin.env junto a ADMIN_PANEL_PASSWORD. Se
       # genera con `python -m libraauth.totp <producto>` dentro del contenedor.

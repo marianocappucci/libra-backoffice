@@ -231,6 +231,11 @@ cd frontend && npm install && npm run build
 | `SECRET_KEY` | sí | Firma la cookie de sesión **de este backoffice**. |
 | `ADMIN_PANEL_TOTP_SECRET` | no | Segundo factor del superadmin (libraauth v0.36.0). Con esto seteado el login pide el código del autenticador. Se genera con `python -m libraauth.totp <producto>`; un valor inválido no deja levantar. |
 | `ADMIN_PANEL_ESTADO_PATH` | no | Archivo donde el bloqueo por intentos fallidos sobrevive al reinicio. El compose de ejemplo lo monta en un volumen. |
+| `WEB_CONCURRENCY` | no | Procesos de uvicorn (`--workers` del `CMD`). Default 1. **No subirlo** sin leer «Varios procesos». |
+| `LIBRA_ERRORES_DIR` | no | Carpeta del registro de errores (`errores.jsonl`). El compose de ejemplo la fija **dentro del volumen `estado`** (`/var/lib/libra-backoffice/errores`); sin ella cae en el directorio de trabajo, o sea dentro del contenedor, y un recreate la borra. |
+| `LIBRA_ENTORNO` | no | `cliente`, `demo` o `dev`: de eso depende cómo avisa el vigía. Sin ella, `desconocido` (se trata como `cliente`). |
+| `LIBRA_INSTANCIA` | no | Nombre del contenedor (`<producto>-admin`). Distingue los ocho backoffices en el registro. |
+| `LIBRA_VERSION` | no | El `release` de cada línea. La imagen la trae del tag con que se construyó (`APP_VERSION`). |
 | `ADMIN_PANEL_TOTP_PATH` | no | Archivo del secreto TOTP enrolado en runtime desde la pantalla Seguridad (F3). Default: `totp.json` al lado de `ADMIN_PANEL_ESTADO_PATH`. Ver "Seguridad: doble factor del superadmin". |
 | `REPO_ROOT` | sí | Checkout del producto en el host, de donde se importan `panel_admin.py` / `nuevo_cliente.py` / `plans.py` y, por defecto, donde vive `clientes/`. |
 | `LIBRA_CLIENTES_DIR` | no | Ruta **absoluta** del directorio de instancias, si no es `REPO_ROOT/clientes`. Requiere libracore >= v1.123.0 (con una anterior se ignora en silencio). Ver "Dónde viven las instancias". |
@@ -313,6 +318,33 @@ Para mover las instancias fuera del checkout hace falta, **los tres a la vez**:
 > sección documenta el mecanismo; apuntarlo a otro directorio y mover datos es
 > un paso aparte, que se pide por separado. **Rollback:** sacar la variable y el
 > mount extra.
+
+## Registro de errores
+
+Desde `libracore` v1.159.0 (ADR-045) un `500` ya no se pierde en el stdout del contenedor: `instalar_registro_de_errores(app, "libra-backoffice")`
+(en `app.py`, al lado de `SecurityHeadersMiddleware`) responde `{"detail": "Error interno", "ref": "a1b2c3d4"}` y deja **una línea JSON** en
+`$LIBRA_ERRORES_DIR/errores.jsonl` (rotación 5 MB × 3, sin cuerpos, cookies ni datos personales). El `ref` es el código que la pantalla «Algo
+falló» (`<ErrorBoundary>` de `libra-ui`, en `main.tsx`) le muestra al usuario; los errores del navegador llegan a `POST /api/errores-cliente`.
+Lee los archivos el vigía del host (`operaciones/vigilar_errores.py` del wiki) y avisa por Telegram.
+
+🔴 **El archivo tiene que estar en un volumen.** El compose de ejemplo lo pone dentro del volumen `estado` (el del login y el tema), en
+`/var/lib/libra-backoffice/errores`; en el host queda en `/var/lib/docker/volumes/<proyecto>_estado/_data/errores/errores.jsonl`, que es lo que
+busca el glob por defecto del vigía. `LIBRA_INSTANCIA` (el `container_name`) es lo que distingue a un backoffice de otro: el producto es siempre
+`libra-backoffice`.
+
+## Varios procesos
+
+El contenedor corre **un solo uvicorn** (`WEB_CONCURRENCY` vale 1 si no se la toca) y así se queda. Qué hay que saber antes de subirlo
+(libraauth v0.50.0, ADR-023):
+
+- **El estado del login es seguro entre procesos sólo con `ADMIN_PANEL_ESTADO_PATH`.** Con él, cada actualización (intentos fallidos, último código
+  TOTP) corre bajo un `flock` sobre `<archivo>.lock`, y un mismo código TOTP lo acepta un solo proceso. Sin él, cada worker lleva sus propios
+  intentos (N veces más margen para un ataque) y su propio «último código»; `AdminAuth` lo avisa en el log del arranque si `WEB_CONCURRENCY` > 1.
+  El compose de ejemplo ya lo setea. Dos **contenedores** (no procesos de uno) tendrían que compartir el volumen.
+- 🔴 **El captcha sigue en memoria**: este backoffice no tiene base propia (administra las instancias por `docker exec` y por HTTP), así que no hay
+  dónde poner `UsadosEnBase`. Con N workers un desafío resuelto sirve **una vez por worker**: el captcha encarece N veces menos el ataque. Para
+  subir `WEB_CONCURRENCY` hace falta darle una base (aunque sea un SQLite en el volumen `estado`) y pasar `Captcha(..., usados=UsadosEnBase(...))`
+  en `app.py`. No se hizo porque hoy no se justifica un worker más.
 
 ## Despliegue
 

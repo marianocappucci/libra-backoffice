@@ -105,8 +105,13 @@ RUN --mount=type=ssh,id=libracore,target=/tmp/ssh-libracore.sock \
 # imagen anterior.
 ARG APP_VERSION=desconocida
 ARG APP_COMMIT=desconocido
-ENV APP_VERSION=$APP_VERSION APP_COMMIT=$APP_COMMIT
+# `LIBRA_VERSION` es el `release` de cada linea del registro de errores (ADR-045 de libracore): aca el build ya
+# recibe el tag de la imagen como `APP_VERSION`, asi que sale de ahi y el compose no tiene que repetirlo.
+ENV APP_VERSION=$APP_VERSION APP_COMMIT=$APP_COMMIT LIBRA_VERSION=$APP_VERSION
 
 EXPOSE 8000
 
-CMD ["uvicorn", "libra_backoffice.asgi:app", "--host", "0.0.0.0", "--port", "8000"]
+# Un solo proceso por defecto: `WEB_CONCURRENCY` (default 1) se pasa a `--workers` y subirlo es una decision, no un
+# descuido. Antes de subirlo, ver "Varios procesos" en el README. `sh -c` + `exec` para que el shell expanda la
+# variable y uvicorn quede como PID 1 (recibe las senales de `docker stop`).
+CMD ["sh", "-c", "exec uvicorn libra_backoffice.asgi:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-1}"]

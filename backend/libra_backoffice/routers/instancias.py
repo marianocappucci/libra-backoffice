@@ -11,6 +11,7 @@ Los seis productos tienen esos scripts y se administran igual, así que este
 router no tiene ninguna rama por producto.
 """
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from libracore.abono import calcular_abono
 from libracore.limites import MAXIMO as MAXIMO_DE_SUCURSALES
 from libracore.validacion import sin_booleanos
@@ -69,6 +70,9 @@ class InstanciaIn(BaseModel):
     # Sucursales que el cliente contrata (ADR-041 de libracore). Sólo para los planes que cobran sucursales adicionales (los que declaran
     # `adicional` en `GET /api/planes`); la instancia NACE con el tope en su `config.json`. `None` = no cargarlo: queda sin límite.
     sucursales_contratadas: int | None = Field(default=None, ge=1, le=MAXIMO_DE_SUCURSALES)
+    # Los adicionales fuera de la escalera que el cliente contrata (ADR-048 de libracore): `{clave: true | cantidad}` según `GET /api/planes` →
+    # `adicionales`. El alta los valida contra el catálogo y el plan; la instancia nace con ellos. Sin mandarlo, no se contrata ninguno.
+    adicionales: dict[str, bool | int] | None = None
 
     _no_son_booleanos = sin_booleanos("sucursales_contratadas")
 
@@ -92,6 +96,15 @@ class PlanIn(BaseModel):
 
 class AddonIn(BaseModel):
     habilitado: bool
+
+
+class AdicionalIn(BaseModel):
+    """Exactamente uno de `habilitado` (sí/no) o `cantidad` (por unidades); `null` es la baja."""
+
+    habilitado: bool | None = None
+    cantidad: int | None = Field(default=None, ge=1, le=MAXIMO_DE_SUCURSALES)
+
+    _no_son_booleanos = sin_booleanos("cantidad")
 
 
 class EstadoIn(BaseModel):
@@ -172,8 +185,13 @@ def crear(datos: InstanciaIn, request: Request):
         raise HTTPException(
             422, f"El plan {datos.plan!r} no cobra sucursales adicionales: no corresponde cargar sucursales contratadas."
         )
+    if datos.adicionales:
+        _validar_adicionales_del_alta(servicios, datos.plan, datos.adicionales)
     try:
-        creada = servicios.crear_cliente(**datos.model_dump())
+        kwargs = datos.model_dump()
+        if not kwargs["adicionales"]:
+            kwargs.pop("adicionales")  # un `crear_cliente` que no lo conozca (libracore anterior a v1.162.0) no tiene por qué recibirlo
+        creada = servicios.crear_cliente(**kwargs)
         # El tema de la suite (feature `apariencia`) llega a la instancia nueva. Mejor esfuerzo: nunca hace fallar el alta.
         apariencia.empujar_a_una_instancia_nueva(request, creada.get("slug", ""))
         return creada
@@ -204,10 +222,20 @@ def editar(slug: str, datos: InstanciaEdit, request: Request):
 
 
 @router.put("/instancias/{slug}/plan")
-def cambiar_plan(slug: str, datos: PlanIn, request: Request):
+async def cambiar_plan(slug: str, datos: PlanIn, request: Request):
+    """Cambia el plan **conservando los adicionales** (ADR-048): el motor no los toca. Si alguno de los contratados no cabe en el plan nuevo, 409 con
+    la lista de claves en `incompatibles` y sin aplicar nada."""
     servicios = _servicios(request)
+    kwargs = {}
+    if _catalogo(servicios):
+        # Lo contratado se lee de la INSTANCIA (gana sobre la copia del `cliente.json`). Si no contesta, el motor usa la copia.
+        contratados = await _contratados_de(request, _obtener(request, slug))
+        if contratados is not None:
+            kwargs["contratados"] = contratados
     try:
-        servicios.set_plan(slug, datos.plan)
+        servicios.set_plan(slug, datos.plan, **kwargs)
+    except getattr(servicios, "AdicionalIncompatibleError", ()) as exc:
+        return JSONResponse(status_code=409, content={"detail": str(exc), "incompatibles": list(exc.incompatibles)})
     except servicios.ServiceError as exc:
         raise HTTPException(422, str(exc))
     return _obtener(request, slug).dict()
@@ -377,3 +405,209 @@ async def cargar_sucursales(slug: str, datos: SucursalesIn, request: Request):
             raise HTTPException(409, _SIN_SOPORTE)
         raise HTTPException(exc.status_code, exc.detalle)
     return _abono_de(instancia, plan, contratadas=respuesta.get("contratadas"), activas=respuesta.get("activas"))
+
+
+# ── Adicionales fuera de la escalera (ADR-048 de libracore) ─────────────────────────────────────────────────────────────────────────────
+#
+# Un adicional es un módulo (sí/no) o una cantidad (sucursales, sucursales con offline) que se contrata aparte del plan y sobrevive a cambiarlo.
+# El catálogo sale del `plans.py` del producto (`services.adicionales_info()`); lo contratado y lo usado, de la INSTANCIA, por HTTP con el token de
+# servicio (`GET/PUT /api/adicionales`), que es quien puede hacer cumplir el tope. A una instancia anterior a libracore v1.162.0, que no tiene esa
+# ruta, se le prenden y apagan los sí/no por `docker exec` (`services.set_adicional`, estado `sin_soporte`): una cantidad no se puede cargar así.
+
+_SIN_SOPORTE_ADICIONALES = (
+    "La instancia todavía no expone los adicionales (libracore anterior a v1.162.0): hay que actualizarla. Mientras tanto sólo se pueden "
+    "prender o apagar los de sí/no."
+)
+
+
+def _catalogo(servicios) -> list[dict]:
+    """El catálogo de adicionales del producto; vacío si el producto no tiene ninguno o si el motor es anterior a v1.162.0."""
+    leer = getattr(servicios, "adicionales_info", None)
+    return list(leer()) if leer else []
+
+
+def _validar_adicionales_del_alta(servicios, plan: str, adicionales: dict) -> None:
+    """422 con el motivo si el alta pide un adicional desconocido, que el plan no admite o con un valor que no corresponde. El motor lo vuelve a
+    validar; acá se dice antes de tocar nada y con el mismo vocabulario que el resto de la pantalla."""
+    por_clave = {a["clave"]: a for a in _catalogo(servicios)}
+    vigente = getattr(servicios, "plan_vigente", lambda p: p)(plan)
+    for clave, valor in adicionales.items():
+        a = por_clave.get(clave)
+        if a is None:
+            raise HTTPException(422, f"Adicional desconocido: {clave!r}. Los del producto: {sorted(por_clave)}.")
+        if valor is False:
+            continue
+        if a["unidad"] is None and valor is not True:
+            raise HTTPException(422, f"«{a['label']}» es un sí/no: tiene que ser true o false.")
+        if a["unidad"] is not None and (isinstance(valor, bool) or valor < 1):
+            raise HTTPException(422, f"«{a['label']}» se cuenta por {a['unidad']}: tiene que ser un entero desde 1.")
+        if a["planes"] is not None and vigente not in a["planes"]:
+            raise HTTPException(422, f"«{a['label']}» no se puede contratar con el plan {plan!r}.")
+
+
+def _contratado_de(item: dict):
+    """`True | cantidad | None` de un ítem que la instancia devolvió, en la forma que espera `abono_por_lineas`."""
+    if item.get("unidad"):
+        return item.get("cantidad") if item.get("habilitado") or item.get("cantidad") else None
+    return True if item.get("habilitado") else None
+
+
+def _vista(catalogo: list[dict], plan: str, leidos: dict | None, *, editable: bool, sin_modulos: bool = False) -> list[dict]:
+    """Los ítems para la pantalla: el catálogo de ese plan más lo que la instancia dice (`leidos` = `{clave: item}`), o el estado desconocido
+    (`None`) si no se pudo leer. `compatible` marca los que el plan no admite (un adicional contratado que no cabe sigue apareciendo)."""
+    resultado = []
+    for a in catalogo:
+        actual = (leidos or {}).get(a["clave"])
+        incluidas = a["incluidas"].get(plan, 0) if isinstance(a["incluidas"], dict) else a["incluidas"]
+        compatible = a["planes"] is None or plan in a["planes"]
+        resultado.append({
+            "clave": a["clave"], "label": a["label"], "precio": a["precio"], "unidad": a["unidad"], "incluidas": incluidas, "limite": a["limite"],
+            "compatible": compatible,
+            "habilitado": actual.get("habilitado") if actual else None,
+            "cantidad": actual.get("cantidad") if actual else None,
+            "usadas": actual.get("usadas") if actual else None,
+            "editable": editable and (a["unidad"] is None or not sin_modulos) and (compatible or bool(actual and actual.get("habilitado"))),
+        })
+    return resultado
+
+
+def _abono_de_adicionales(servicios, plan: str, items: list[dict]) -> dict | None:
+    """El abono por líneas (plan + una línea por adicional contratado; `precio=None` es «a cotizar»). Sólo con el estado leído de verdad."""
+    calcular = getattr(servicios, "abono_por_lineas", None)
+    if not calcular or any(i["habilitado"] is None and i["cantidad"] is None for i in items):
+        return None
+    contratados = {i["clave"]: _contratado_de(i) for i in items}
+    try:
+        return calcular(plan, {k: v for k, v in contratados.items() if v})
+    except ValueError:  # una clave que el producto ya no vende: sin abono, no un 500
+        return None
+
+
+async def _leer_de_la_instancia(request: Request, instancia) -> dict:
+    """`GET /api/adicionales` de la instancia: `{"estado": "ok"|..., "detalle", "items": {clave: item}}`. Nunca lanza."""
+    if instancia.estado != "running":
+        return {"estado": "detenida", "detalle": "El contenedor no está corriendo.", "items": None}
+    try:
+        respuesta = await request.app.state.cliente_instancia.pedir("GET", instancia, request.app.state.settings.adicionales_instancia_path)
+    except InstanciaInalcanzable as exc:
+        return {"estado": "inalcanzable", "detalle": exc.detalle, "items": None}
+    except RespuestaDeInstancia as exc:
+        if _sin_soporte(exc):
+            return {"estado": "sin_soporte", "detalle": _SIN_SOPORTE_ADICIONALES, "items": None}
+        return {"estado": "error", "detalle": exc.detalle, "items": None}
+    lista = respuesta.get("adicionales") if isinstance(respuesta, dict) else None
+    if not isinstance(lista, list):
+        return {"estado": "sin_soporte", "detalle": _SIN_SOPORTE_ADICIONALES, "items": None}
+    return {"estado": "ok", "detalle": "", "items": {i["clave"]: i for i in lista if isinstance(i, dict) and "clave" in i}}
+
+
+async def _contratados_de(request: Request, instancia) -> dict | None:
+    """Lo contratado en la instancia, `{clave: True | cantidad}`, para validar un cambio de plan; `None` si no se pudo leer."""
+    leido = await _leer_de_la_instancia(request, instancia)
+    if leido["estado"] != "ok":
+        return None
+    return {k: v for k, v in ((c, _contratado_de(i)) for c, i in leido["items"].items()) if v}
+
+
+def _fallback_por_docker(servicios, slug: str, catalogo: list[dict]) -> dict:
+    """El estado de los adicionales con módulo de una instancia SIN el router, por `docker exec`: `{clave: item}` (sin cantidades)."""
+    try:
+        modulos = servicios.adicionales_de_instancia(slug)
+    except servicios.ServiceError:
+        modulos = {}
+    return {c: {"habilitado": modulos.get(c), "cantidad": None, "usadas": None} for c in (a["clave"] for a in catalogo) if c in modulos}
+
+
+def _respuesta_de_adicionales(servicios, instancia, leido: dict, catalogo: list[dict], plan_key: str) -> dict:
+    estado, items = leido["estado"], leido["items"]
+    if estado == "ok":
+        vista = _vista(catalogo, plan_key, items, editable=True)
+        # Una copia informativa en el `cliente.json` que difiere de la instancia se alinea: gana la instancia.
+        sincronizar = getattr(servicios, "sincronizar_copia_de_adicionales", None)
+        if sincronizar:
+            sincronizar(instancia.slug, {i["clave"]: _contratado_de(i) for i in vista})
+        abono = _abono_de_adicionales(servicios, plan_key, vista)
+    elif estado == "sin_soporte":
+        vista = _vista(catalogo, plan_key, _fallback_por_docker(servicios, instancia.slug, catalogo), editable=True, sin_modulos=True)
+        abono = None
+    else:
+        vista = _vista(catalogo, plan_key, None, editable=False)
+        abono = None
+    return {"slug": instancia.slug, "plan": plan_key, "estado": estado, "detalle": leido["detalle"], "adicionales": vista, "abono": abono}
+
+
+@router.get("/instancias/{slug}/adicionales")
+async def listar_adicionales(slug: str, request: Request):
+    """El catálogo de adicionales aplicable al plan de la instancia con lo contratado y lo usado, y el abono por líneas.
+
+    Siempre 200 con un `estado` (como `GET .../abono`): `ok`; `no_aplica` (el producto no tiene adicionales); `detenida`; `inalcanzable`;
+    `sin_soporte` (la instancia es anterior a libracore v1.162.0: sólo se leen los sí/no, por `docker exec`); `error`. `habilitado: null` es «no se
+    pudo leer», nunca «apagado». `abono: null` si no se pudo leer todo; una línea con `precio: null` es «a cotizar»."""
+    servicios = _servicios(request)
+    instancia = _obtener(request, slug)
+    catalogo = _catalogo(servicios)
+    plan = _plan_de(servicios, instancia.plan) or {}
+    plan_key = plan.get("key", instancia.plan)
+    if not catalogo:
+        return {"slug": slug, "plan": plan_key, "estado": "no_aplica", "detalle": "", "adicionales": [], "abono": None}
+    return _respuesta_de_adicionales(servicios, instancia, await _leer_de_la_instancia(request, instancia), catalogo, plan_key)
+
+
+async def _cargar_adicional(request: Request, slug: str, clave: str, habilitado, cantidad):
+    """Contrata (o da de baja, con `None`) un adicional y devuelve la misma vista que el `GET`. Un fallo es un error HTTP de verdad: guardar que no
+    se guardó no puede salir como 200."""
+    servicios = _servicios(request)
+    instancia = _obtener(request, slug)
+    catalogo = _catalogo(servicios)
+    a = next((x for x in catalogo if x["clave"] == clave), None)
+    if a is None:
+        raise HTTPException(404, f"No hay ningún adicional {clave!r} en este producto. Los del producto: {sorted(x['clave'] for x in catalogo)}.")
+    plan = _plan_de(servicios, instancia.plan) or {}
+    plan_key = plan.get("key", instancia.plan)
+    contrata = bool(habilitado) or cantidad is not None
+    if contrata and a["planes"] is not None and plan_key not in a["planes"]:
+        raise HTTPException(422, f"«{a['label']}» no se puede contratar con el plan {plan_key!r}.")
+    cuerpo = {"cantidad": cantidad} if a["unidad"] else {"habilitado": bool(habilitado)}
+    try:
+        await request.app.state.cliente_instancia.pedir(
+            "PUT", instancia, f"{request.app.state.settings.adicionales_instancia_path}/{clave}", json=cuerpo)
+    except InstanciaInalcanzable as exc:
+        raise HTTPException(502, str(exc))
+    except RespuestaDeInstancia as exc:
+        if not _sin_soporte(exc):
+            raise HTTPException(exc.status_code, exc.detalle)
+        if a["unidad"]:
+            raise HTTPException(409, _SIN_SOPORTE_ADICIONALES)
+        try:
+            servicios.set_adicional(slug, clave, bool(habilitado))
+        except servicios.ServiceError as err:
+            raise HTTPException(422, str(err))
+    else:
+        registrar = getattr(servicios, "registrar_copia_de_adicionales", None)
+        if registrar:
+            registrar(slug, {clave: (cantidad if a["unidad"] else True) if contrata else None})
+    return _respuesta_de_adicionales(servicios, instancia, await _leer_de_la_instancia(request, instancia), catalogo, plan_key)
+
+
+@router.put("/instancias/{slug}/adicionales/{clave}")
+async def cargar_adicional(slug: str, clave: str, datos: AdicionalIn, request: Request):
+    """Contrata un adicional: `{"habilitado": true}` para un sí/no o `{"cantidad": n}` para uno por unidades (`null` = baja). 404 si no existe, 422 si
+    el cuerpo no corresponde o el plan no lo admite, 409 si la instancia no expone los adicionales y es uno por unidades, 502 si no contesta."""
+    pedidos = datos.model_fields_set & {"habilitado", "cantidad"}
+    if len(pedidos) != 1:
+        raise HTTPException(422, "Indicá exactamente uno: «habilitado» (sí/no) o «cantidad» (por unidades); null es la baja.")
+    por_clave = {a["clave"]: a for a in _catalogo(_servicios(request))}
+    a = por_clave.get(clave)
+    if a is not None and a["unidad"] is not None and "habilitado" in pedidos:
+        if datos.habilitado:
+            raise HTTPException(422, f"«{a['label']}» se cuenta por {a['unidad']}: indicá la cantidad.")
+        return await _cargar_adicional(request, slug, clave, False, None)
+    if a is not None and a["unidad"] is None and "cantidad" in pedidos:
+        raise HTTPException(422, f"«{a['label']}» es un sí/no: indicá «habilitado», no una cantidad.")
+    return await _cargar_adicional(request, slug, clave, datos.habilitado, datos.cantidad)
+
+
+@router.delete("/instancias/{slug}/adicionales/{clave}")
+async def dar_de_baja_adicional(slug: str, clave: str, request: Request):
+    """La baja de un adicional (equivale a `PUT` con `null`)."""
+    return await _cargar_adicional(request, slug, clave, False, None)
