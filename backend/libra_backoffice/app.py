@@ -28,6 +28,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from libraauth.admin_auth import AdminAuth
 from libraauth.captcha import Captcha
+from libracore.errores import instalar_registro_de_errores
 from libracore.security_headers import CSP_SPA, SecurityHeadersMiddleware
 
 from .cliente_instancia import ClienteInstancia
@@ -57,15 +58,25 @@ def create_app(
     # del captcha (libra-ui) también: sale de `/assets/`, no de `blob:`. Es la
     # misma política que los ocho productos desde libracore v1.89.0.
     app.add_middleware(SecurityHeadersMiddleware, csp=CSP_SPA)
+    # El registro de errores de la familia (ADR-045 de libracore): un 500 deja una linea JSON en
+    # `$LIBRA_ERRORES_DIR/errores.jsonl` con un `ref` que el usuario puede dictar, y se monta
+    # `POST /api/errores-cliente` para los errores del navegador. Al construir la app, antes del primer pedido.
+    # `LIBRA_INSTANCIA` (el contenedor, p. ej. `gestiolibra-admin`) distingue a los ocho backoffices entre si.
+    instalar_registro_de_errores(app, "libra-backoffice")
 
     app.state.settings = settings
     app.state.admin_auth = AdminAuth(dev_secret_fallback=_DEV_SECRET)
     # El captcha del login. **Uno por proceso** y no uno por request: la lista
     # de desafíos ya usados vive adentro, y dos la partirían en dos — un desafío
     # resuelto serviría una vez en cada una. Alcanza porque el contenedor corre
-    # un solo uvicorn (el CMD del Dockerfile no pasa `--workers`); con varios
-    # habría que mover esa lista a algo compartido. Las claves salen del mismo
-    # `SECRET_KEY` que la cookie, por HKDF y con un `info` propio.
+    # un solo uvicorn (el CMD del Dockerfile pasa `--workers ${WEB_CONCURRENCY:-1}`,
+    # o sea 1). 🔴 Con varios la lista se partiría por proceso: un desafío resuelto
+    # serviría una vez por worker. Este backoffice NO tiene base propia donde
+    # ponerla (`UsadosEnBase` de libraauth v0.50.0, ADR-023, la necesita), así que
+    # antes de subir `WEB_CONCURRENCY` hay que darle una (ver "Varios procesos" en
+    # el README); el estado del login, en cambio, ya es seguro entre procesos con
+    # `ADMIN_PANEL_ESTADO_PATH`. Las claves salen del mismo `SECRET_KEY` que la
+    # cookie, por HKDF y con un `info` propio.
     app.state.captcha = Captcha(app.state.admin_auth.secret_key)
     app.state.inventario = inventario if inventario is not None else construir_inventario(settings)
     # El tema de la suite (feature `apariencia`): la fuente de verdad vive acá y se empuja a las instancias.
