@@ -28,6 +28,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from libraauth.admin_auth import AdminAuth
 from libraauth.captcha import Captcha
+from libracore.docs_api import cerrar_docs_de_la_api
 from libracore.errores import instalar_registro_de_errores
 from libracore.security_headers import CSP_SPA, SecurityHeadersMiddleware
 
@@ -51,7 +52,11 @@ def create_app(
     """`inventario` se puede inyectar; en producción lo arma `construir_inventario`."""
     settings = settings or cargar_settings()
 
-    app = FastAPI(title=f"{settings.product_name} — Backoffice", docs_url=None, redoc_url=None)
+    app = FastAPI(title=f"{settings.product_name} — Backoffice")
+    # `/docs`, `/redoc` y `/openapi.json` sólo en desarrollo (ADR-053 de libracore). Antes se apagaban `/docs` y `/redoc` con
+    # `docs_url=None`, pero faltaba `openapi_url`: `/openapi.json` publicaba, sin sesión, el mapa de todas las rutas del backoffice
+    # —y las tres rutas apagadas caían en el fallback de la SPA, que contesta `index.html` con 200—. Acá dan 404.
+    cerrar_docs_de_la_api(app)
     # `CSP_SPA` y no la CSP por defecto: esa es la de las apps Jinja2, y le
     # habilita a esta SPA `'unsafe-inline'` en `script-src` y `cdn.jsdelivr.net`,
     # que no usa. Vite emite el JS como archivos del propio origen, y el worker

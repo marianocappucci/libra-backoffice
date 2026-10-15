@@ -207,6 +207,7 @@ Casi todo. Lo genuinamente nuevo de este repo es el ensamblado y el proxy.
 backend/libra_backoffice/   FastAPI, API JSON
 frontend/                   Vite + React + shadcn/ui + libra-ui
 Dockerfile                  build del frontend -> estáticos servidos por el backend
+scripts/construir_imagen.sh arma el `docker build` de la imagen (ver "Construir la imagen")
 ```
 
 ## Desarrollo
@@ -355,6 +356,113 @@ Contenedor en la red `stack_stack-net` del VPS, proxy host de NPM apuntando
 
 Las credenciales van en `/etc/<producto>-admin.env` (chmod 600, fuera del
 repo), igual que las de los backoffices que ya existían.
+
+### Construir la imagen
+
+Una sola imagen, `libra-backoffice:<tag>`, la usan los ocho `<producto>-admin`
+(el producto lo elige `PRODUCT_SLUG`/`FEATURES` del compose, no la imagen). Se
+construye **en el VPS, desde un checkout limpio de `main`** (`/root/libra-backoffice`),
+con:
+
+```bash
+git pull --ff-only
+export LIBRA_SSH_KEY_LIBRACORE=...   # ruta de la deploy key de libracore
+export LIBRA_SSH_KEY_LIBRAAUTH=...   # ruta de la deploy key de libraauth
+export LIBRA_SSH_KEY_LIBRA_UI=...    # ruta de la deploy key de libra-ui
+scripts/construir_imagen.sh --dry-run   # imprime el comando sin construir
+scripts/construir_imagen.sh             # construye (tag: vAAAA.MM.DD-HHMMSS)
+scripts/construir_imagen.sh v2026.10.15-120000   # o con un tag explícito
+```
+
+El script no lleva rutas ni contenido de claves: las rutas viajan por entorno.
+Se niega a construir con el árbol sucio (`APP_COMMIT` mentiría) o fuera de `main`
+(salvo `--permitir-rama`), y lee los ids de `--ssh` **del propio Dockerfile**, así
+que una dependencia privada nueva le exige su variable sola
+(`backend/tests/test_construir_imagen.py` lo cubre). Lo que arma es:
+
+```bash
+docker build \
+  --ssh libracore=$LIBRA_SSH_KEY_LIBRACORE \
+  --ssh libraauth=$LIBRA_SSH_KEY_LIBRAAUTH \
+  --ssh libra-ui=$LIBRA_SSH_KEY_LIBRA_UI \
+  --build-arg APP_VERSION=$TAG --build-arg APP_COMMIT=$(git rev-parse --short HEAD) \
+  -t libra-backoffice:$TAG -t libra-backoffice:latest .
+```
+
+| Pieza | Qué es |
+|---|---|
+| `--ssh libra-ui=` | Stage del frontend: `npm ci` baja `libra-ui` por `git+https`, y el stage reescribe esa URL a SSH. Un solo mount y un `SSH_AUTH_SOCK` alcanzan. |
+| `--ssh libracore=` y `--ssh libraauth=` | Stage de Python: `uv sync --frozen` resuelve las dos de `uv.lock`. Cada una tiene su alias `Host github-<repo>` con su `IdentityAgent`. |
+| `APP_VERSION` | El tag de la imagen. Alimenta `LIBRA_VERSION` (el `release` del registro de errores) y el campo `backoffice.version` de `/api/salud`. |
+| `APP_COMMIT` | El commit corto del código que se construyó. Sin él la imagen dice `desconocido`. |
+| `:latest` | Sólo sirve para comparar image IDs; **ningún compose lo usa**, siempre un tag concreto. |
+
+🔴 **Una clave por `--ssh` id, no un agente con las tres cargadas.** Con varias
+en un agente, SSH las ofrece en orden y GitHub autentica con la primera que
+acepta, que puede no ser la del repo que se está clonando.
+
+Las claves privadas viajan por `--mount=type=ssh` y no quedan en ninguna capa.
+Lo que sí está horneado en el Dockerfile son las claves **públicas** de libracore
+y libraauth (`/root/.ssh/id_libracore.pub`, `id_libraauth.pub`): sólo le dicen a
+ssh qué fingerprint pedirle al agente. **Si se rota una de esas deploy keys, hay
+que cambiar también su línea `.pub` en el Dockerfile**, o el build falla con
+«no more authentication methods to try».
+
+> Si buildx ≥ 0.38 pide `--allow=fs.read=...` por las rutas de las claves, antepóngase
+> `BUILDX_BAKE_ENTITLEMENTS_FS=0` (es lo que `reglas/deploy.md` del wiki indica para
+> `docker compose up --build`; para `docker build` a secas no se midió).
+
+**Los tags no ordenan cronológicamente** (`v2026.08.02-1910` se construyó
+*antes* que `-1605`). Cuál imagen es más nueva lo dicen el image ID y el
+`APP_COMMIT`, nunca el nombre.
+
+### Verificar la imagen antes de tocar nada
+
+```bash
+docker run --rm libra-backoffice:$TAG printenv APP_VERSION APP_COMMIT
+docker run --rm libra-backoffice:$TAG sh -c 'ls /opt/frontend-dist/assets/index-*.js && grep -l "<texto de lo recién agregado>" /opt/frontend-dist/assets/*.js'
+```
+
+El primero tiene que devolver el tag y el commit que se esperan; el segundo
+confirma que el bundle de la imagen trae lo nuevo (el frontend se resuelve en el
+build: un `restart` o un build viejo sirven el bundle anterior).
+
+### Desplegar en los `<producto>-admin`
+
+Cada backoffice es un compose propio (`docker-compose.example.yml`) que apunta a
+la imagen por **tag concreto** y sin `build:`. Desplegar es repinear esa línea:
+**de a un producto**, empezando por uno de bajo riesgo, y sin tocar el resto del
+compose salvo que el cambio agregue una feature o una variable.
+
+1. En el directorio del compose (`/root/<producto>/admin/`; en Contalibra y
+   Restolibra es `/root/<producto>/backoffice/`): copiar
+   `docker-compose.yml` a `docker-compose.yml.antes-<motivo>-<fecha>`.
+2. Cambiar `image: libra-backoffice:<tag viejo>` por el tag nuevo (y, si hace
+   falta, sumar la feature a `FEATURES`).
+3. `docker compose up -d` (recrea el contenedor; **no** `restart`).
+4. Esperar `healthy` y verificar.
+
+**Rollback:** devolver `image:` al tag anterior (queda en el respaldo del paso
+1) y `docker compose up -d`.
+
+### Verificar el despliegue
+
+Por contenido, no sólo por salud (`/health` da 200 también con la imagen vieja):
+
+```bash
+docker inspect -f '{{.State.Health.Status}} restarts={{.RestartCount}} {{.Image}}' <producto>-admin
+docker exec <producto>-admin printenv APP_VERSION APP_COMMIT
+docker exec <producto>-admin python3 -c "import json,urllib.request; print(json.load(urllib.request.urlopen('http://localhost:8000/health', timeout=3)))"
+curl -s https://admin.<producto>.com.ar/ | grep -o 'assets/index-[^"]*\.js'   # el bundle servido
+curl -s -o /dev/null -w '%{http_code}\n' https://admin.<producto>.com.ar/api/salud   # sin sesión: 401
+```
+
+Tiene que dar: `healthy`, `restarts=0`, el `APP_VERSION`/`APP_COMMIT` de la
+imagen construida, un objeto JSON en `/health`, el **mismo image ID** que
+`docker image inspect -f '{{.Id}}' libra-backoffice:$TAG` y el mismo hash de
+bundle que en la imagen (y que en los demás `-admin` ya actualizados).
+Con sesión, `backoffice.version` y `backoffice.commit` de `/api/salud` dicen lo
+mismo (es lo que muestra la pantalla de salud).
 
 ## Dónde se arregla (regla de la familia, 2026-10-03)
 
