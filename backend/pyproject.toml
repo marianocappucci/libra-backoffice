@@ -186,6 +186,7 @@ dev = [
     # tests del cliente HTTP se saltearian con un warning y la suite quedaria
     # en verde sin haberlos ejecutado.
     "anyio>=4",
+    "pytest-xdist>=3.8",
 ]
 
 [tool.hatch.build.targets.wheel]
