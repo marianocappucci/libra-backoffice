@@ -54,7 +54,8 @@ describe('Apariencia', () => {
     expect(await screen.findByLabelText('Ítem activo del menú: fondo')).toHaveValue('')
     expect(screen.getByLabelText('Ítem activo del menú: franja')).toHaveValue('')
     // El éxito y la franja del POS tienen valor de siempre.
-    expect(screen.getByLabelText('Color de éxito')).toHaveValue('#059669')
+    // El éxito es emerald-700 desde libra-ui v0.154.0 (ADR-067): el blanco sobre #059669 daba 3,77:1 y AA pide 4,5:1.
+    expect(screen.getByLabelText('Color de éxito')).toHaveValue('#047857')
     expect(screen.getByLabelText('Encabezado del POS: inicio')).toHaveValue('#0284c7')
     expect(screen.getByLabelText('Acento principal')).toHaveValue('')
     expect(screen.getByLabelText('Barra lateral: fondo')).toHaveValue('#1c1e22')
