@@ -172,7 +172,8 @@ dependencies = [
     # v1.164.0 -> v1.166.0 (2026-10-14): incluye v1.165.0 (un proceso sin el almacen de secretos dice la causa) y `GET /api/facturas?envio=enviada|sin_enviar` filtra el listado por el rastro de envios por mail (ADR-051 de libracore). Sin migracion.
     # v1.167.0 -> v1.168.0 (2026-10-15, propuesta; ADR-053 de libracore): `libracore.docs_api.cerrar_docs_de_la_api`: `/docs`, `/redoc` y `/openapi.json` sólo con `ENV=development` (o `LIBRA_DOCS_API=1`); en un cliente real y en la demo dan 404. Sin migracion. `uv.lock` se regenera cuando exista el tag.
     # v1.168.0 -> v1.170.0 (2026-10-15): v1.169.0 suma `fk_de_producto.soltar_fk` (ADR-056; sin efecto en este producto, la usa LibraDesk) y v1.170.0 hace que `delete_client` bloquee la baja de un cliente con cuenta corriente (`cc_pagos`, `cc_debitos`, `recibos` y `cc_asientos` con rol cliente; ADR-057): desactivarlo en vez de borrarlo. Sin migracion.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.170.0",
+    # v1.170.0 -> v1.173.0 (2026-10-16): v1.171.0 (ADR-058) no se puede cobrar mas de lo que falta de una factura (409); v1.172.0 (ADR-059 y ADR-060) las notas de credito restan de lo pendiente (resumen y tablero cuentan tambien las cobradas a medias por lo que falta) y cobro por turno; v1.173.0 (ADR-061) una demo no habla con ARCA ni muestra datos fiscales reales (`libracore.demo`). Para este producto no cambia nada (usa `libracore.admin` y `libracore.provisioning`). Sin migracion.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.173.0",
     "fastapi>=0.111,<1",
     "uvicorn[standard]>=0.30,<1",
     # El control plane le habla a cada instancia por HTTP.
