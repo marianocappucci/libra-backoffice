@@ -67,7 +67,7 @@ function Vista({ c, producto }: { c: ColoresDeVista; producto: Producto | null }
   const bordeItem = c.menuActivoBorde ?? defecto('menuActivoBorde')
   const posInicio = c.posInicio ?? '#0284c7'
   const posFin = c.posFin ?? '#4f46e5'
-  const exito = c.exito ?? '#059669'
+  const exito = c.exito ?? defecto('exito') // el del kit (libra-ui v0.154.0, ADR-067: emerald-700, #047857, para que el texto blanco llegue a AA)
   const item = (activo: boolean, nombre: string, texto: string) => (
     <div
       className="rounded-md px-3 py-2 text-sm"
