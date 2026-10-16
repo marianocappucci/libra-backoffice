@@ -42,7 +42,8 @@ dependencies = [
     # a hacer divergir.
     # v0.48.0 -> v0.49.0 (2026-10-12): `registrador_dbapi` y el formato del log en funciones puras (ADR-022). Sin migracion.
     # v0.49.0 -> v0.50.0 (2026-10-13): varios procesos (ADR-023): `UsadosEnBase` para el captcha (tabla `libraauth_captcha_usados`, migracion `0003`) y `AdminAuth` con `flock` sobre el JSON de estado.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.50.0",
+    # v0.50.0 -> v0.51.0 (2026-10-15, ADR-024): el responsable acepta por adelantado la proxima version de los Terminos (`GET /terminos` suma `proxima`, `POST /aceptar` acepta la vigente o la proxima). Sin migracion; el aviso pide libra-ui v0.153.0.
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.51.0",
     # `admin.services` (inventario y ciclo de vida de instancias) y
     # `security_headers`. v1.3.0: el alta ya no elige un puerto que otro
     # producto del host tiene bindeado, y hace rollback del directorio si el
@@ -170,7 +171,8 @@ dependencies = [
     # v1.163.0 -> v1.164.0 (2026-10-14): cada envio por mail de un comprobante o un presupuesto deja rastro (`envios_email`, ADR-050 de libracore): `GET .../{id}/envios`, `envios_email` en el detalle y `envio_email` en el listado. **Migracion `0026_envios_email`** (tabla nueva) en la cadena de `libracore-migrar`.
     # v1.164.0 -> v1.166.0 (2026-10-14): incluye v1.165.0 (un proceso sin el almacen de secretos dice la causa) y `GET /api/facturas?envio=enviada|sin_enviar` filtra el listado por el rastro de envios por mail (ADR-051 de libracore). Sin migracion.
     # v1.167.0 -> v1.168.0 (2026-10-15, propuesta; ADR-053 de libracore): `libracore.docs_api.cerrar_docs_de_la_api`: `/docs`, `/redoc` y `/openapi.json` sólo con `ENV=development` (o `LIBRA_DOCS_API=1`); en un cliente real y en la demo dan 404. Sin migracion. `uv.lock` se regenera cuando exista el tag.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.168.0",
+    # v1.168.0 -> v1.170.0 (2026-10-15): v1.169.0 suma `fk_de_producto.soltar_fk` (ADR-056; sin efecto en este producto, la usa LibraDesk) y v1.170.0 hace que `delete_client` bloquee la baja de un cliente con cuenta corriente (`cc_pagos`, `cc_debitos`, `recibos` y `cc_asientos` con rol cliente; ADR-057): desactivarlo en vez de borrarlo. Sin migracion.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.170.0",
     "fastapi>=0.111,<1",
     "uvicorn[standard]>=0.30,<1",
     # El control plane le habla a cada instancia por HTTP.
