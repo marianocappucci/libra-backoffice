@@ -31,6 +31,7 @@ from libraauth.captcha import Captcha
 from libracore.docs_api import cerrar_docs_de_la_api
 from libracore.errores import instalar_registro_de_errores
 from libracore.security_headers import CSP_SPA, SecurityHeadersMiddleware
+from libracore.spa import archivo_publico
 
 from .cliente_instancia import ClienteInstancia
 from .inventario import construir_inventario
@@ -92,7 +93,7 @@ def create_app(
         timeout=settings.timeout_instancia,
     )
 
-    @app.get("/health", include_in_schema=False)
+    @app.api_route("/health", methods=["GET", "HEAD"], include_in_schema=False)
     def health():
         """Sin auth: la usan el healthcheck de Docker y el proxy.
 
@@ -157,10 +158,17 @@ def _montar_frontend(app: FastAPI, frontend_dist: str | None) -> None:
 
     app.mount("/assets", AssetsInmutables(directory=dist / "assets"), name="assets")
 
-    @app.get("/{ruta:path}", include_in_schema=False)
+    # HEAD además de GET: un monitor que hace `curl -I` no puede recibir 405.
+    @app.api_route("/{ruta:path}", methods=["GET", "HEAD"], include_in_schema=False)
     def spa(ruta: str):
-        archivo = dist / ruta
-        if ruta and archivo.is_file():
+        # 🔴 `archivo_publico` (libracore.spa) y no `dist / ruta`: ese `ruta` es
+        # lo que el cliente mandó, con sus `..` y hasta con una barra inicial
+        # (`//etc/hostname` → `dist / "/etc/hostname"` es `/etc/hostname`). Sin
+        # resolverlo y verificar que quede adentro de `dist`, el fallback
+        # servía cualquier archivo del contenedor, `/proc/self/environ`
+        # incluido. Medido el 2026-10-18 desde adentro del VPS.
+        archivo = archivo_publico(dist, ruta)
+        if archivo is not None:
             # Los sueltos del dist (favicon, manifest) tampoco llevan hash en
             # el nombre: mismo criterio que el index.
             return FileResponse(archivo, headers={"Cache-Control": SIN_CACHE})
