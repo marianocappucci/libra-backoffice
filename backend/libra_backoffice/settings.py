@@ -69,6 +69,8 @@ class Settings:
     limites_instancia_path: str = "/api/limites/sucursales"
     # Los adicionales fuera de la escalera (`libracore.adicionales_router`, ADR-048): el catálogo, lo contratado y lo usado de la instancia.
     adicionales_instancia_path: str = "/api/adicionales"
+    # El global, de respaldo: el token de cada instancia sale de su compose (ADR-071 de libracore,
+    # ver `cliente_instancia.py`). Vacío es válido.
     service_token: str = ""
     timeout_instancia: float = 5.0
     # Vocabulario de roles de ESTE producto — no es el mismo en toda la
@@ -169,13 +171,11 @@ def cargar_settings(env: dict | None = None) -> Settings:
             "(ej. `contalibra.db`)."
         )
 
+    # El global ya no es obligatorio para arrancar (ADR-071 de libracore): cada instancia tiene su
+    # propio token, que el backoffice lee de su compose. Queda de respaldo para las que todavía no
+    # tienen uno; una instancia sin propio ni global contesta su propio error (`SinCredencial`),
+    # no tira el backoffice.
     token = (env.get("LIBRA_SERVICE_TOKEN") or "").strip()
-    if features & {"smtp", "usuarios", "demos", "reenvio-correo", "apariencia"} and not token:
-        raise ConfiguracionInvalida(
-            "Las features 'smtp' y 'usuarios' se resuelven hablándole a la API de cada "
-            "instancia y necesitan LIBRA_SERVICE_TOKEN — el mismo valor que tienen "
-            "seteado las instancias de este producto."
-        )
 
     return Settings(
         product_slug=slug,

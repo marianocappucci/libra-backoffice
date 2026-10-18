@@ -291,11 +291,14 @@ def test_falta_db_filename():
         cargar_settings({**BASE, "DB_FILENAME": ""})
 
 
-def test_smtp_sin_token_de_servicio():
-    """Sin token no hay forma de hablarle a una instancia: mejor no levantar
-    que levantar y dar 401 en cada pantalla."""
-    with pytest.raises(ConfiguracionInvalida, match="LIBRA_SERVICE_TOKEN"):
-        cargar_settings({**BASE, "LIBRA_SERVICE_TOKEN": ""})
+def test_smtp_sin_token_global_arranca():
+    """Desde el ADR-071 de libracore cada instancia tiene su token y el
+    backoffice lo lee de su compose: el global es sólo respaldo, así que su
+    falta ya no impide arrancar (la instancia sin propio ni global contesta su
+    error, ver `test_token_por_instancia.py`)."""
+    s = cargar_settings({**BASE, "LIBRA_SERVICE_TOKEN": ""})
+    assert s.service_token == ""
+    assert s.tiene("smtp")
 
 
 def test_sin_features_por_instancia_no_hace_falta_el_token():

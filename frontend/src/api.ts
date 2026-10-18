@@ -204,8 +204,12 @@ export type EstadoInstancia = {
   slug: string
   nombre: string
   container: string
-  estado: 'ok' | 'error' | 'inalcanzable' | 'sin contenedor'
+  estado: 'ok' | 'error' | 'inalcanzable' | 'sin contenedor' | 'sin credencial'
   detalle: string
+  // El token de servicio de la instancia (ADR-071 de libracore): `propio`,
+  // `compartido` (igual al global: falta rotarla) o `ausente` (se le manda el
+  // global). Opcional: un backend anterior no lo manda.
+  token?: 'propio' | 'compartido' | 'ausente'
 }
 
 // El doble factor (TOTP) del superadmin. `origen` distingue de dónde sale el

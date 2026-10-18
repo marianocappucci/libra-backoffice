@@ -30,6 +30,12 @@ instancias del VPS el 2026-08-15— pasan igual:
 
 Pedir una clave concreta habría puesto en rojo a productos sanos, que es el error
 opuesto y se nota menos.
+
+**El token de cada instancia (ADR-071 de libracore).** Cada fila trae `token`:
+`propio` (la instancia tiene uno suyo, distinto del global), `compartido` (tiene
+uno, pero es el mismo valor que el global: falta rotarla) o `ausente` (no tiene;
+se le manda el global). Se compara con `compare_digest` y no sale ningún valor
+ni huella: alcanza con saber a cuáles les falta rotar.
 """
 import asyncio
 import os
@@ -38,7 +44,7 @@ from datetime import UTC, datetime, timezone
 
 from fastapi import APIRouter, Depends, Request
 
-from ..cliente_instancia import InstanciaInalcanzable, RespuestaDeInstancia
+from ..cliente_instancia import InstanciaInalcanzable, RespuestaDeInstancia, SinCredencial
 from ..deps import admin_actual, requiere_feature
 
 router = APIRouter(
@@ -53,13 +59,18 @@ _ARRANQUE = time.time()
 
 
 async def _estado_de(cliente, instancia, health_path: str) -> dict:
-    base = {"slug": instancia.slug, "nombre": instancia.nombre, "container": instancia.container}
+    base = {
+        "slug": instancia.slug, "nombre": instancia.nombre, "container": instancia.container,
+        "token": cliente.estado_token(instancia.slug),
+    }
     if not instancia.container:
         return {**base, "estado": "sin contenedor", "detalle": "El compose no declara container_name."}
     try:
         cuerpo = await cliente.pedir("GET", instancia, health_path)
     except InstanciaInalcanzable as exc:
         return {**base, "estado": "inalcanzable", "detalle": exc.detalle}
+    except SinCredencial as exc:
+        return {**base, "estado": "sin credencial", "detalle": exc.detalle}
     except RespuestaDeInstancia as exc:
         # Un 200 con cuerpo que no es JSON llega por acá con el detalle que
         # explica el fallback de la SPA; un 4xx/5xx real, con su código.
