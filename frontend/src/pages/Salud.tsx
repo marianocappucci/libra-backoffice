@@ -18,6 +18,14 @@ function duracion(segundos: number): string {
   return `${minutos} min`
 }
 
+// Qué dice cada estado del token. `propio` es lo esperado; los otros dos son
+// instancias que todavía usan la credencial del producto y falta rotarlas.
+const TOKEN: Record<NonNullable<EstadoInstancia['token']>, string> = {
+  propio: 'token propio',
+  compartido: 'token compartido',
+  ausente: 'sin token propio',
+}
+
 function FilaInstancia({ estado }: { estado: EstadoInstancia }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-b py-2 last:border-0">
@@ -28,7 +36,12 @@ function FilaInstancia({ estado }: { estado: EstadoInstancia }) {
           {estado.detalle && ` · ${estado.detalle}`}
         </p>
       </div>
-      <Badge variant={estado.estado === 'ok' ? 'default' : 'destructive'}>{estado.estado}</Badge>
+      <div className="flex items-center gap-1">
+        {estado.token && (
+          <Badge variant={estado.token === 'propio' ? 'outline' : 'secondary'}>{TOKEN[estado.token]}</Badge>
+        )}
+        <Badge variant={estado.estado === 'ok' ? 'default' : 'destructive'}>{estado.estado}</Badge>
+      </div>
     </div>
   )
 }

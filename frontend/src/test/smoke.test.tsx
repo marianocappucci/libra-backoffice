@@ -93,7 +93,10 @@ function conSesion(rutas: Record<string, (init: Init) => Promise<Response>> = {}
         features: ['instancias', 'smtp'],
         usuarios_roles: [{ value: 'staff', label: 'Staff' }, { value: 'admin', label: 'Admin' }],
         backoffice: { version: 'x', commit: 'y', arrancado: '', uptime_segundos: 61 },
-        instancias: [{ slug: 'acme', nombre: 'ACME SA', container: 'c', estado: 'ok', detalle: '' }],
+        instancias: [
+          { slug: 'acme', nombre: 'ACME SA', container: 'c', estado: 'ok', detalle: '', token: 'propio' },
+          { slug: 'beta', nombre: 'Beta SRL', container: 'b', estado: 'ok', detalle: '', token: 'compartido' },
+        ],
       }))
     }
     return Promise.resolve(json([]))
@@ -432,7 +435,14 @@ describe('salud', () => {
     conSesion()
     montar('/salud')
     expect(await screen.findByText('DemoLibra')).toBeInTheDocument()
-    expect(await screen.findByText('ok')).toBeInTheDocument()
+    expect(await screen.findAllByText('ok')).toHaveLength(2)
+  })
+
+  it('muestra el estado del token de cada instancia (ADR-071 de libracore)', async () => {
+    conSesion()
+    montar('/salud')
+    expect(await screen.findByText('token propio')).toBeInTheDocument()
+    expect(screen.getByText('token compartido')).toBeInTheDocument()
   })
 })
 

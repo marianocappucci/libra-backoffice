@@ -16,7 +16,8 @@ Qué sale de dónde:
 
 - `AdminAuth` (sesión del superadmin) — `libraauth.admin_auth`, sin cambios.
 - Captcha del login — `libraauth.captcha` (v0.40.0).
-- Token de servicio contra las instancias — `libraauth v0.7.0`.
+- Token de servicio contra las instancias — `libraauth v0.7.0`; uno por
+  instancia desde libracore v1.183.0 (ADR-071), ver `cliente_instancia.py`.
 - Inventario y ciclo de vida — `libracore.admin.services`.
 - Cabeceras de seguridad — `libracore.security_headers`.
 """
@@ -87,8 +88,12 @@ def create_app(
     app.state.inventario = inventario if inventario is not None else construir_inventario(settings)
     # El tema de la suite (feature `apariencia`): la fuente de verdad vive acá y se empuja a las instancias.
     app.state.almacen_tema = AlmacenDeTema(settings.tema_path)
+    # El token de cada instancia sale de su compose en cada request (ADR-071 de libracore); el global
+    # (`LIBRA_SERVICE_TOKEN` del backoffice) queda de respaldo. Un inventario inyectado sin
+    # `token_de_servicio` (los tests) usa sólo el global.
     app.state.cliente_instancia = ClienteInstancia(
         token=settings.service_token,
+        token_de_instancia=getattr(app.state.inventario, "token_de_servicio", None),
         puerto=settings.instancia_puerto,
         timeout=settings.timeout_instancia,
     )

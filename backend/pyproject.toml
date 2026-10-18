@@ -43,7 +43,8 @@ dependencies = [
     # v0.48.0 -> v0.49.0 (2026-10-12): `registrador_dbapi` y el formato del log en funciones puras (ADR-022). Sin migracion.
     # v0.49.0 -> v0.50.0 (2026-10-13): varios procesos (ADR-023): `UsadosEnBase` para el captcha (tabla `libraauth_captcha_usados`, migracion `0003`) y `AdminAuth` con `flock` sobre el JSON de estado.
     # v0.50.0 -> v0.51.0 (2026-10-15, ADR-024): el responsable acepta por adelantado la proxima version de los Terminos (`GET /terminos` suma `proxima`, `POST /aceptar` acepta la vigente o la proxima). Sin migracion; el aviso pide libra-ui v0.153.0.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.51.0",
+    # v0.51.0 -> v0.52.0 (2026-10-18, ADR-025): `LIBRA_SERVICE_TOKEN_ANTERIOR` (la instancia acepta el viejo mientras dura una rotación) y la credencial de integración aparte (`LIBRA_INTEGRACION_TOKEN`, `x-integracion-auth`). Sin migracion.
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.52.0",
     # `admin.services` (inventario y ciclo de vida de instancias) y
     # `security_headers`. v1.3.0: el alta ya no elige un puerto que otro
     # producto del host tiene bindeado, y hace rollback del directorio si el
@@ -176,7 +177,8 @@ dependencies = [
     # v1.173.0 -> v1.176.0 (2026-10-17): v1.174.0 `OpcionesCajas.sucursal_por_defecto` (ADR-062, opt-in); v1.175.0 el pago a cuenta corriente bloquea sus facturas en una transaccion (ADR-063) y la nota de debito tiene tope de cobro (ADR-064, 409 si se cobra de mas); v1.176.0 la NC de una factura al contado cobrada acepta `destino` devolver/a_favor (ADR-065, sin `destino` como antes). Sin migracion.
     # v1.176.0 -> v1.181.0 (2026-10-18): v1.177.0 alta con 2 workers y 2 CPU; v1.178.0 lo pendiente de una ND visible (ADR-066); v1.179.0 la NC sin CAE recuerda el destino de la plata (ADR-067, **migracion 0027 aditiva**); v1.180.0 create_remito(conn=) (ADR-068); v1.181.0 HEAD en montar_spa (ADR-069).
     # v1.181.0 -> v1.182.0 (2026-10-18): un solo reloj de Argentina para «hoy» y «ahora» (ADR-070, libracore.fechas.hoy/ahora). Sin migracion.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.182.0",
+    # v1.182.0 -> v1.183.0 (2026-10-18, ADR-071): credenciales de maquina una por instancia. El alta genera `LIBRA_SERVICE_TOKEN` e `LIBRA_INTEGRACION_TOKEN` propios; `admin.services.token_de_servicio(slug)` lee el de la instancia de su compose/.env (lo usa `ClienteInstancia` en cada request); `docker compose` corre sin las credenciales del proceso. Sin migracion.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.183.0",
     "fastapi>=0.111,<1",
     "uvicorn[standard]>=0.30,<1",
     # El control plane le habla a cada instancia por HTTP.

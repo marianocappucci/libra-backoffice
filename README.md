@@ -68,7 +68,7 @@ reciben el tema al darlas de alta (mejor esfuerzo; si no contestan todavía, fig
 | `TEMA_PATH` | Dónde se guarda el tema de la suite. Por defecto, `tema.json` junto a `ADMIN_PANEL_ESTADO_PATH` (o `/var/lib/libra-backoffice/tema.json`). |
 | `TEMA_INSTANCIA_PATH` | La ruta del tema en cada instancia. Por defecto `/api/tema` (la misma en los seis productos). |
 
-Hace falta `LIBRA_SERVICE_TOKEN`, como `smtp` y `usuarios`.
+Se autentica contra cada instancia con su token de servicio, como `smtp` y `usuarios` (ver «Token de servicio por instancia»).
 
 ## Ciclo de vida de una instancia
 
@@ -241,22 +241,39 @@ cd frontend && npm install && npm run build
 | `REPO_ROOT` | sí | Checkout del producto en el host, de donde se importan `panel_admin.py` / `nuevo_cliente.py` / `plans.py` y, por defecto, donde vive `clientes/`. |
 | `LIBRA_CLIENTES_DIR` | no | Ruta **absoluta** del directorio de instancias, si no es `REPO_ROOT/clientes`. Requiere libracore >= v1.123.0 (con una anterior se ignora en silencio). Ver "Dónde viven las instancias". |
 | `DB_FILENAME` | sí | Nombre del archivo de base de cada instancia (`contalibra.db`). |
-| `LIBRA_SERVICE_TOKEN` | con `smtp`/`usuarios` | El mismo valor que tienen seteado las instancias de este producto. |
+| `LIBRA_SERVICE_TOKEN` | no | El global, **de respaldo**: se manda a las instancias que todavía no tienen token propio y es el reintento durante una rotación. Ver «Token de servicio por instancia». |
 | `SMTP_PATH` | no | Default `/admin/smtp`. Contalibra y Restolibra usan `/api/config/smtp`. |
 | `USERS_PATH` | no | Default `/users`. LibraDesk usa `/api/usuarios`. |
 | `USERS_ROLES` | no | Vocabulario de roles de ESTE producto, separado por comas (ej. `admin,operador,cajero`). Default `staff,admin`. Llega al `Select` de rol de la pantalla de Usuarios vía `/api/salud` (campo `usuarios_roles`) — mismo camino que `features`. Sin etiqueta propia: la muestra es el valor capitalizado (`operador` → «Operador»). Contalibra: `admin,operador,cajero`. Restolibra: `admin,operador,cajero,mozo`. |
 | `INSTANCIA_PUERTO` | no | Puerto interno de las instancias. Default `8000`. |
 | `TIMEOUT_INSTANCIA` | no | Segundos. Default `5`. |
 
-> ⚠️ **`LIBRA_SERVICE_TOKEN` tiene que ser el mismo valor en el backoffice y en
-> todas las instancias del producto.** Es lo que autentica al backoffice contra
-> ellas. Con un valor distinto, todas las pantallas del plano de configuración
-> contestan 401. Vive en `/etc/<producto>-admin.env` (chmod 600) del lado del
-> backoffice y en el compose de cada instancia del otro.
->
-> Una instancia **sin** la variable seteada rechaza el token y sigue
-> funcionando como antes: el guard de libraauth es opt-in por ausencia. Eso es
-> lo que permite actualizar a `v0.7.0` sin tocar ningún compose.
+### Token de servicio por instancia
+
+Desde libracore v1.183.0 (su ADR-071) **cada instancia tiene su propio
+`LIBRA_SERVICE_TOKEN`** en su `docker-compose.yml` (literal o `${VAR}` contra su
+`.env`). El alta lo genera, y `panel_admin.py token-servicio <slug> --rotar` /
+`--cerrar` lo rota en dos pasos (libraauth v0.52.0 acepta el anterior mientras
+tanto). El backoffice lo lee del disco **en cada request**
+(`libracore.admin.services.token_de_servicio(slug)`, sin caché), así que una
+rotación no pide reiniciarlo. Los valores no se loguean ni salen por la API.
+
+- **Sin token propio** (instancias anteriores al ADR-071, hasta que se roten):
+  se manda el global de `/etc/<producto>-admin.env`.
+- **Ventana de rotación:** entre que `--rotar` escribe el valor nuevo y que el
+  `up -d` recrea el contenedor, la instancia todavía conoce el viejo. Si una
+  request con el propio da **401** y hay un global distinto, se reintenta **una
+  vez** con el global (en la primera rotación el viejo es el global). Ningún
+  otro código se reintenta.
+- **Sin propio ni global:** esa instancia contesta 503 con un mensaje que dice
+  cuál y cómo generarle uno; el backoffice y las demás siguen andando. Por eso
+  el global ya no es obligatorio para arrancar.
+- **`/api/salud`** trae `token` por instancia: `propio`, `compartido` (el mismo
+  valor que el global: falta rotarla) o `ausente`. La pantalla de salud lo
+  muestra junto al estado.
+
+**Orden:** primero se despliega este backoffice, después se rotan las
+instancias; al revés, la instancia rotada contesta 401 al backoffice viejo.
 
 ## Dónde viven las instancias (`LIBRA_CLIENTES_DIR`)
 

@@ -106,6 +106,12 @@ class Inventario:
     def listar(self) -> list[Instancia]:
         return [self._a_instancia(c) for c in self.servicios.listar_clientes()]
 
+    def token_de_servicio(self, slug: str) -> str | None:
+        """El `LIBRA_SERVICE_TOKEN` propio de la instancia, leído de su compose
+        (o su `.env`) en cada llamada; `None` si no tiene (libracore v1.183.0,
+        ADR-071). Lo usa `ClienteInstancia`; 🔴 el valor no se loguea nunca."""
+        return self.servicios.token_de_servicio(slug)
+
     def obtener(self, slug: str) -> Instancia:
         cliente = self.servicios.get_cliente(slug)
         if not cliente:
