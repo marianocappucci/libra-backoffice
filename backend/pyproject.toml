@@ -180,7 +180,8 @@ dependencies = [
     # v1.182.0 -> v1.183.0 (2026-10-18, ADR-071): credenciales de maquina una por instancia. El alta genera `LIBRA_SERVICE_TOKEN` e `LIBRA_INTEGRACION_TOKEN` propios; `admin.services.token_de_servicio(slug)` lee el de la instancia de su compose/.env (lo usa `ClienteInstancia` en cada request); `docker compose` corre sin las credenciales del proceso. Sin migracion.
     # v1.183.0 -> v1.184.0 (2026-10-18): los cobros de MercadoPago con el CUIT de quien factura nacen ignorados y no se auto-facturan (ADR-072); `admin.services.clientes_dir()` publica. Sin migracion.
     # v1.184.0 -> v1.184.1 (2026-10-18): tokens por instancia, `${VAR:?mensaje}` se lee del .env (corrige ADR-071). Sin migracion.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.184.1",
+    # v1.184.1 -> v1.185.0 (2026-10-18): la nota de debito de una factura a cuenta corriente hereda la cuenta: asienta su debito y se paga con recibo (ADR-073). Sin migracion.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.185.0",
     "fastapi>=0.111,<1",
     "uvicorn[standard]>=0.30,<1",
     # El control plane le habla a cada instancia por HTTP.
