@@ -90,10 +90,11 @@ def create_app(
     app.state.almacen_tema = AlmacenDeTema(settings.tema_path)
     # El token de cada instancia sale de su compose en cada request (ADR-071 de libracore); el global
     # (`LIBRA_SERVICE_TOKEN` del backoffice) queda de respaldo. Un inventario inyectado sin
-    # `token_de_servicio` (los tests) usa sólo el global.
+    # `token_de_servicio` (los tests) usa sólo el global; el anterior es el primer respaldo ante un 401.
     app.state.cliente_instancia = ClienteInstancia(
         token=settings.service_token,
         token_de_instancia=getattr(app.state.inventario, "token_de_servicio", None),
+        anterior_de_instancia=getattr(app.state.inventario, "token_anterior_de_servicio", None),
         puerto=settings.instancia_puerto,
         timeout=settings.timeout_instancia,
     )

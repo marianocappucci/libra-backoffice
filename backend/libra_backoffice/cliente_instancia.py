@@ -75,6 +75,7 @@ class ClienteInstancia:
         *,
         token: str = "",
         token_de_instancia: Callable[[str], str | None] | None = None,
+        anterior_de_instancia: Callable[[str], str | None] | None = None,
         puerto: int = 8000,
         timeout: float = 5.0,
         transport=None,
@@ -86,6 +87,9 @@ class ClienteInstancia:
         # lo prueban), todas usan el global, como antes del ADR-071.
         self._token = token or ""
         self._token_de_instancia = token_de_instancia
+        # `anterior_de_instancia(slug)`: el `LIBRA_SERVICE_TOKEN_ANTERIOR` de la instancia (el que
+        # deja `--rotar`), primer respaldo ante un 401 con el propio. Ver `respaldos()`.
+        self._anterior_de_instancia = anterior_de_instancia
         self._puerto = puerto
         self._timeout = timeout
         # Costura para los tests: con un `ASGITransport` la suite le habla a una
@@ -102,21 +106,35 @@ class ClienteInstancia:
             return ""
         return (self._token_de_instancia(slug) or "").strip()
 
-    def credencial(self, slug: str) -> tuple[str, str | None]:
-        """`(token a mandar, respaldo para un 401)`. Se lee cada vez: sin caché.
-
-        El respaldo es el global sólo si la instancia tiene uno propio **y** es
-        distinto: es la ventana de una rotación, en la que el compose ya tiene el
-        valor nuevo y el contenedor, hasta que el `up -d` lo recrea, todavía
-        conoce el viejo (en la primera rotación, el global).
-        """
+    def credencial(self, slug: str) -> tuple[str, bool]:
+        """`(token a mandar, si es el propio de la instancia)`. Se lee cada vez: sin caché."""
         propio = self._propio(slug)
         if propio:
-            respaldo = self._token if self._token and not _iguales(propio, self._token) else None
-            return propio, respaldo
+            return propio, True
         if self._token:
-            return self._token, None
+            return self._token, False
         raise SinCredencial(slug)
+
+    def respaldos(self, slug: str, probado: str):
+        """Los tokens a probar, en orden, después de un 401 con el propio: a lo sumo dos.
+
+        Es la ventana de una rotación: el compose ya tiene el valor nuevo y el
+        contenedor, hasta que el `up -d` lo recrea, todavía conoce el viejo. El
+        viejo es el `LIBRA_SERVICE_TOKEN_ANTERIOR` que dejó `--rotar` y, si no
+        hay (o tampoco entra), el global (en la primera rotación el viejo es el
+        global). Se saltea lo vacío y lo ya probado. Generador: el anterior se
+        lee del disco recién si hace falta.
+        """
+        probados = [probado]
+        lectores = (
+            lambda: (self._anterior_de_instancia(slug) or "").strip() if self._anterior_de_instancia else "",
+            lambda: self._token,
+        )
+        for leer in lectores:
+            candidato = leer()
+            if candidato and not any(_iguales(candidato, p) for p in probados):
+                probados.append(candidato)
+                yield candidato
 
     def estado_token(self, slug: str) -> str:
         """`propio` / `compartido` / `ausente`, sin exponer ningún valor."""
@@ -141,20 +159,24 @@ class ClienteInstancia:
         JSON el chequeo habría dado "ok" sin haber tocado la app.
         """
         url = self.url(instancia, path)
-        token, respaldo = self.credencial(instancia.slug)
+        token, es_propio = self.credencial(instancia.slug)
         try:
             async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as cliente:
                 resp = await cliente.request(
                     metodo, url, json=json, headers={"X-Internal-Auth": token},
                 )
-                # La ventana de una rotación: UN reintento con el global, sólo
-                # ante un 401 y sólo si el propio es distinto. Ningún otro código
-                # se reintenta (un 403 o un 422 son respuestas, no credenciales
-                # viejas) y nada de esto se loguea.
-                if resp.status_code == 401 and respaldo:
-                    resp = await cliente.request(
-                        metodo, url, json=json, headers={"X-Internal-Auth": respaldo},
-                    )
+                # La ventana de una rotación: sólo ante un 401 con el propio, el
+                # anterior de la instancia y después el global, sin repetir un
+                # valor (dos reintentos como máximo, ver `respaldos()`). Ningún
+                # otro código se reintenta (un 403 o un 422 son respuestas, no
+                # credenciales viejas) y nada de esto se loguea.
+                if resp.status_code == 401 and es_propio:
+                    for respaldo in self.respaldos(instancia.slug, token):
+                        resp = await cliente.request(
+                            metodo, url, json=json, headers={"X-Internal-Auth": respaldo},
+                        )
+                        if resp.status_code != 401:
+                            break
         except httpx.HTTPError as exc:
             raise InstanciaInalcanzable(instancia.slug, f"{type(exc).__name__}: {exc}") from exc
 

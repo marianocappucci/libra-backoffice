@@ -262,9 +262,11 @@ rotación no pide reiniciarlo. Los valores no se loguean ni salen por la API.
   se manda el global de `/etc/<producto>-admin.env`.
 - **Ventana de rotación:** entre que `--rotar` escribe el valor nuevo y que el
   `up -d` recrea el contenedor, la instancia todavía conoce el viejo. Si una
-  request con el propio da **401** y hay un global distinto, se reintenta **una
-  vez** con el global (en la primera rotación el viejo es el global). Ningún
-  otro código se reintenta.
+  request con el propio da **401**, se reintenta con el
+  `LIBRA_SERVICE_TOKEN_ANTERIOR` de la instancia (si hay y es distinto) y, si
+  no hay o también da 401, con el global (en la primera rotación el viejo es el
+  global), sin repetir un valor ya probado: **dos reintentos como máximo**.
+  Ningún otro código se reintenta.
 - **Sin propio ni global:** esa instancia contesta 503 con un mensaje que dice
   cuál y cómo generarle uno; el backoffice y las demás siguen andando. Por eso
   el global ya no es obligatorio para arrancar.

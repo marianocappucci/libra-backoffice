@@ -16,8 +16,11 @@ Lo que el inventario garantiza es el `container`, que es lo que el control plane
 necesita: la URL de una instancia es su nombre de contenedor en la red
 `stack_stack-net`.
 """
+import logging
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -111,6 +114,25 @@ class Inventario:
         (o su `.env`) en cada llamada; `None` si no tiene (libracore v1.183.0,
         ADR-071). Lo usa `ClienteInstancia`; 🔴 el valor no se loguea nunca."""
         return self.servicios.token_de_servicio(slug)
+
+    def token_anterior_de_servicio(self, slug: str) -> str | None:
+        """El `LIBRA_SERVICE_TOKEN_ANTERIOR` de la instancia (el que deja `token-servicio --rotar`
+        hasta el `--cerrar`); `None` si no tiene. Misma validación de slug y mismo manejo de un
+        compose ilegible que `token_de_servicio` del motor, que no expone el anterior.
+        🔴 El valor no se loguea nunca."""
+        from libracore.provisioning import tokens_instancia
+
+        if not slug or slug in (".", "..") or Path(slug).name != slug:
+            return None
+        dir_instancia = self.servicios._clientes_dir() / slug
+        if not dir_instancia.is_dir():
+            return None
+        try:
+            return tokens_instancia.leer(
+                dir_instancia, tokens_instancia.anterior_de(tokens_instancia.SERVICIO))
+        except tokens_instancia.TokenError:
+            _log.warning("No se pudo leer el token anterior de servicio de %s (compose ilegible)", dir_instancia)
+            return None
 
     def obtener(self, slug: str) -> Instancia:
         cliente = self.servicios.get_cliente(slug)
