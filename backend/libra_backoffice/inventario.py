@@ -124,7 +124,7 @@ class Inventario:
 
         if not slug or slug in (".", "..") or Path(slug).name != slug:
             return None
-        dir_instancia = self.servicios._clientes_dir() / slug
+        dir_instancia = self.servicios.clientes_dir() / slug
         if not dir_instancia.is_dir():
             return None
         try:

@@ -285,7 +285,7 @@ def test_el_inventario_lee_el_anterior_del_compose(tmp_path):
     )
 
     class _Servicios:
-        def _clientes_dir(self):
+        def clientes_dir(self):
             return tmp_path
 
     inv = Inventario.__new__(Inventario)
