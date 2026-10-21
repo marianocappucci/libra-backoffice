@@ -44,7 +44,7 @@ dependencies = [
     # v0.49.0 -> v0.50.0 (2026-10-13): varios procesos (ADR-023): `UsadosEnBase` para el captcha (tabla `libraauth_captcha_usados`, migracion `0003`) y `AdminAuth` con `flock` sobre el JSON de estado.
     # v0.50.0 -> v0.51.0 (2026-10-15, ADR-024): el responsable acepta por adelantado la proxima version de los Terminos (`GET /terminos` suma `proxima`, `POST /aceptar` acepta la vigente o la proxima). Sin migracion; el aviso pide libra-ui v0.153.0.
     # v0.51.0 -> v0.52.0 (2026-10-18, ADR-025): `LIBRA_SERVICE_TOKEN_ANTERIOR` (la instancia acepta el viejo mientras dura una rotación) y la credencial de integración aparte (`LIBRA_INTEGRACION_TOKEN`, `x-integracion-auth`). Sin migracion.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.52.0",
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.54.0",
     # `admin.services` (inventario y ciclo de vida de instancias) y
     # `security_headers`. v1.3.0: el alta ya no elige un puerto que otro
     # producto del host tiene bindeado, y hace rollback del directorio si el
