@@ -199,7 +199,8 @@ dependencies = [
     # v1.194.0 -> v1.195.0 (2026-10-25): conexion del nodo sin PuertoDeVentas, 202 unico y alta sin la variable del core (ADR-084). Sin migracion.
     # v1.195.0 -> v1.195.1 (2026-10-25): sin los historicos del core de GestioLibra y MedLibra ni la excepcion de VentaLibra (addendum ADR-084). Sin migracion.
     # v1.195.1 -> v1.196.0 (2026-10-26): indices de ajuste (ADR-085, migracion 0030), periodos de contrato y mora (ADR-086).
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.196.0",
+    # v1.196.0 -> v1.196.1 (2026-10-26): periodo_anclado y sumar_meses publicos (addendum ADR-086). Sin migracion.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.196.1",
     "fastapi>=0.111,<1",
     "uvicorn[standard]>=0.30,<1",
     # El control plane le habla a cada instancia por HTTP.
