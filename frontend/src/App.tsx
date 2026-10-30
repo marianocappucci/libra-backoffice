@@ -23,6 +23,12 @@ function RutaProtegida({ children }: { children: ReactNode }) {
   return <Layout>{children}</Layout>
 }
 
+/** La ficha de una instancia, con la sesión resuelta: la pestaña «Marca» depende de las features del producto. */
+function FichaDeInstancia() {
+  const { user } = useAuth()
+  return <Instancia conMarca={user?.features?.includes('marca') ?? false} />
+}
+
 export default function App() {
   return (
     <Routes>
@@ -41,7 +47,7 @@ export default function App() {
         path="/instancias/:slug"
         element={
           <RutaProtegida>
-            <Instancia />
+            <FichaDeInstancia />
           </RutaProtegida>
         }
       />

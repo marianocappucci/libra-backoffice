@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 FEATURES_VALIDAS = frozenset(
-    {"instancias", "smtp", "usuarios", "salud", "demos", "reenvio-correo", "apariencia"}
+    {"instancias", "smtp", "usuarios", "salud", "demos", "reenvio-correo", "apariencia", "marca"}
 )
 
 #: Mismo vocabulario que ya tenía el `Select` de rol de `Usuarios` de
@@ -64,6 +64,9 @@ class Settings:
     # de cada instancia los publica (`libracore.tema_router`, ADR-012; es la misma en los seis productos).
     tema_path: Path = Path("/var/lib/libra-backoffice/tema.json")
     tema_instancia_path: str = "/api/tema"
+    # La marca de la instancia (feature `marca`, ADR-092/093 de libracore): dónde monta cada instancia `libracore.marca_router`. Los términos
+    # propios cuelgan de ahí (`{marca_instancia_path}/terminos`, `/logo`).
+    marca_instancia_path: str = "/api/marca"
     # Las sucursales contratadas de la instancia (`libracore.limites`, ADR-041): se lee y se carga acá. La misma ruta en todos los productos que
     # cobran por sucursal (hoy VentaLibra).
     limites_instancia_path: str = "/api/limites/sucursales"
@@ -90,7 +93,7 @@ class Settings:
     def features_por_instancia(self) -> list[str]:
         """Las que se resuelven hablándole a una instancia, no al host."""
         return [
-            f for f in ("smtp", "usuarios", "demos", "reenvio-correo", "apariencia")
+            f for f in ("smtp", "usuarios", "demos", "reenvio-correo", "apariencia", "marca")
             if f in self.features
         ]
 
@@ -193,6 +196,7 @@ def cargar_settings(env: dict | None = None) -> Settings:
         health_path=(env.get("HEALTH_PATH") or "/health").strip(),
         tema_path=_ruta_del_tema(env),
         tema_instancia_path=(env.get("TEMA_INSTANCIA_PATH") or "/api/tema").strip(),
+        marca_instancia_path=(env.get("MARCA_INSTANCIA_PATH") or "/api/marca").strip().rstrip("/"),
         limites_instancia_path=(env.get("LIMITES_INSTANCIA_PATH") or "/api/limites/sucursales").strip(),
         adicionales_instancia_path=(env.get("ADICIONALES_INSTANCIA_PATH") or "/api/adicionales").strip(),
         service_token=token,

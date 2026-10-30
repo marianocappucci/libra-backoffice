@@ -83,7 +83,7 @@ class _ReenvioCorreoIn(BaseModel):
 
 
 def construir_instancia_falsa(db_path, *, es_demo=False, roles=("staff", "admin"), con_tema=True, sucursales_activas=None,
-                              adicionales_plans=None, en_uso=None):
+                              adicionales_plans=None, en_uso=None, con_marca=False, marca_falsa=None):
     """Una instancia de producto: los routers de `libraauth` (SMTP, demo y
     ahora usuarios).
 
@@ -102,6 +102,14 @@ def construir_instancia_falsa(db_path, *, es_demo=False, roles=("staff", "admin"
     mismas guardas, sobre una tabla `modulos` en memoria (`app.state.modulos`); `en_uso` es `{clave: callable}` con lo que se mide de cada uno. Sin
     él, la instancia no lo expone (una libracore anterior a v1.162.0): la ruta cae en el fallback de la SPA, que es lo que pasa en producción.
     🔴 Igual que los límites, el dato de las cantidades vive en el `config.json` de ESTE proceso.
+
+    `con_marca=True` monta los routers REALES de `libracore.marca_router` y `libracore.terminos_propios` (ADR-092 y ADR-093), con las guardas que
+    les pone VentaLibra: leer, público; escribir, admin o token de servicio. Sin él, la instancia no los expone (una libracore anterior a
+    v1.206.0): la ruta cae en el fallback de la SPA (o en un 404, con `con_tema`), que es lo que pasa en producción.
+    🔴 Igual que los límites, el dato vive en el `config.json` y en el directorio de la marca de ESTE proceso (`config_manager.CONFIG_PATH`,
+    `MARCA_DIR`), así que dos instancias con `con_marca=True` en un mismo test comparten marca: para «una con marca propia y otra sin» está
+    `marca_falsa`. `marca_falsa={"propia": True, ...}` monta sólo un `GET /api/marca` que contesta eso, sin estado. Es un doble: el contrato
+    de lo que lee el backoffice de él lo fija `test_el_contrato_de_la_marca_real` contra el router real.
 
     `roles` es el vocabulario de ESTA instancia (`("admin", "operador",
     "cajero")` en Contalibra, por ejemplo) — lo valida `build_users_router`,
@@ -180,6 +188,16 @@ def construir_instancia_falsa(db_path, *, es_demo=False, roles=("staff", "admin"
         app.include_router(build_limites_router(
             guard_lectura=json_api_require_admin_o_servicio, guard_escritura=solo_servicio, medir_activas=sucursales_activas,
         ))
+
+    if con_marca:
+        from libracore.marca_router import build_marca_admin_router, build_marca_router
+
+        app.include_router(build_marca_router())
+        app.include_router(build_marca_admin_router(), dependencies=[Depends(json_api_require_admin_o_servicio)])
+    elif marca_falsa is not None:
+        @app.get("/api/marca")
+        def leer_marca_falsa():
+            return marca_falsa
 
     if con_tema:
         # El contrato de `libracore.tema_router` (ADR-012): `GET /api/tema` público, `PUT /api/tema` del admin o del token de servicio;

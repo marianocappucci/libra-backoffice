@@ -13,7 +13,7 @@
 // `components/Pestanas.tsx`).
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { KeyRound, Mail, Power, Server, Users } from 'lucide-react'
+import { KeyRound, Mail, Palette, Power, Server, Users } from 'lucide-react'
 import { ConfiguracionSmtp } from 'libra-ui/ConfiguracionSmtp'
 import { Usuarios } from 'libra-ui/Usuarios'
 import { Badge } from '@/components/ui/badge'
@@ -28,6 +28,7 @@ import { BajaInstancia } from '../components/BajaInstancia'
 import { EditarInstancia } from '../components/EditarInstancia'
 import { Adicionales } from '../components/Adicionales'
 import { EstadoServicio } from '../components/EstadoServicio'
+import { MarcaDeLaInstancia } from '../components/MarcaDeLaInstancia'
 import { Pestanas } from '../components/Pestanas'
 import { CodigosDemo } from '../components/CodigosDemo'
 import { ReenvioCorreo } from '../components/ReenvioCorreo'
@@ -52,7 +53,10 @@ const ACCIONES = [
   { accion: 'restart', label: 'Reiniciar' },
 ] as const
 
-export function Instancia() {
+/** `conMarca`: si el producto tiene la feature `marca` (lo decide `App`, que tiene la sesión). La pestaña «Marca» existe sólo con ella (a diferencia
+ *  de las otras, que muestran el 404 de la instancia): es opt-in de la venta a marca blanca, y un backend viejo que no manda `features` no la tiene.
+ *  Llega por prop y no por `useAuth` para que esta pantalla siga andando sin proveedor de sesión (así la prueban `instancia-*.test.tsx`). */
+export function Instancia({ conMarca = false }: { conMarca?: boolean } = {}) {
   const { slug = '' } = useParams()
   const navegar = useNavigate()
   const [instancia, setInstancia] = useState<TInstancia | null>(null)
@@ -364,6 +368,9 @@ export function Instancia() {
               />
             ),
           },
+          ...(conMarca
+            ? [{ clave: 'marca', label: 'Marca', icono: Palette, contenido: <MarcaDeLaInstancia slug={slug} /> }]
+            : []),
           // Última pestaña, y no junto a Usuarios: sólo significa algo en la
           // instancia demo de cada producto. En el resto la propia instancia
           // contesta 404 y la pantalla lo dice, en vez de mostrar un ABM
