@@ -11,6 +11,9 @@ tema llega a ellas, con el token de servicio, igual que ya pasa con el correo y 
 - `detenida`: el contenedor no corre; no se intenta (y no se espera un timeout por cada una).
 - `inalcanzable`: corre pero no contesta. Es información, no una falla del backoffice.
 - `sin_soporte`: contesta, pero todavía no tiene el endpoint (una versión de libracore anterior a `v1.118.0`): hay que actualizarla.
+- `marca_propia`: la instancia es de un revendedor (feature `marca`, ADR-092 de libracore) y **no se le aplica el tema de la suite**: sus colores
+  son los de su marca. Se mira ANTES de empujar o de comparar, siempre (aunque esta pantalla no tenga la feature `marca`: la marca la puede haber
+  cargado otro camino). Una instancia que no contesta ese chequeo es «no» y sigue el camino de siempre.
 - `rechazada`: la instancia contestó 422 al tema.
 - `error`: cualquier otro fallo de la instancia.
 
@@ -27,6 +30,7 @@ from pydantic import BaseModel
 
 from ..cliente_instancia import InstanciaInalcanzable, RespuestaDeInstancia
 from ..deps import admin_actual, requiere_feature
+from .marca import tiene_marca_propia
 from ..tema_suite import TemaInvalido, validar_forma
 
 logger = logging.getLogger(__name__)
@@ -66,6 +70,9 @@ async def _una(request: Request, i, metodo: str, cuerpo, comparar_con: dict | No
     """Le habla a UNA instancia y traduce el resultado. Nunca lanza: una caída no puede tumbar a las demás."""
     if i.estado != "running":
         return _resultado(i, "detenida", "El contenedor no está corriendo.")
+    # Una instancia de marca blanca tiene SUS colores: el tema de la suite no se le empuja ni se le compara (ver `marca_propia` arriba).
+    if await tiene_marca_propia(request, i):
+        return _resultado(i, "marca_propia", "Tiene marca propia: no se le aplica el tema de la suite.")
     path = request.app.state.settings.tema_instancia_path
     try:
         respuesta = await request.app.state.cliente_instancia.pedir(metodo, i, path, json=cuerpo)

@@ -143,8 +143,14 @@ class ClienteInstancia:
             return AUSENTE
         return COMPARTIDO if self._token and _iguales(propio, self._token) else PROPIO
 
-    async def pedir(self, metodo: str, instancia, path: str, json=None, esperar_json: bool = True):
+    async def pedir(
+        self, metodo: str, instancia, path: str, json=None, esperar_json: bool = True, *, archivos=None, crudo: bool = False,
+    ):
         """Devuelve el JSON de la instancia, o traduce el fallo.
+
+        `archivos` es un `{campo: (nombre, bytes, tipo)}` que se manda como `multipart/form-data` (el logo de la marca, ADR-092 de
+        libracore): bytes en memoria, así que un reintento ante el 401 de una rotación los vuelve a mandar enteros. `crudo=True` devuelve
+        `(tipo, bytes)` en vez de interpretar un JSON: es la vista previa del logo, que la instancia sirve como `image/png`.
 
         Un timeout o un DNS que no resuelve **no** son un 500 del backoffice:
         son "esa instancia está caída", que es información y no una falla. El
@@ -163,7 +169,7 @@ class ClienteInstancia:
         try:
             async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as cliente:
                 resp = await cliente.request(
-                    metodo, url, json=json, headers={"X-Internal-Auth": token},
+                    metodo, url, json=json, files=archivos, headers={"X-Internal-Auth": token},
                 )
                 # La ventana de una rotación: sólo ante un 401 con el propio, el
                 # anterior de la instancia y después el global, sin repetir un
@@ -173,7 +179,7 @@ class ClienteInstancia:
                 if resp.status_code == 401 and es_propio:
                     for respaldo in self.respaldos(instancia.slug, token):
                         resp = await cliente.request(
-                            metodo, url, json=json, headers={"X-Internal-Auth": respaldo},
+                            metodo, url, json=json, files=archivos, headers={"X-Internal-Auth": respaldo},
                         )
                         if resp.status_code != 401:
                             break
@@ -182,6 +188,8 @@ class ClienteInstancia:
 
         if resp.status_code >= 400:
             raise RespuestaDeInstancia(resp.status_code, _detalle(resp))
+        if crudo:
+            return resp.headers.get("content-type", ""), resp.content
         if not esperar_json:
             return None
         try:

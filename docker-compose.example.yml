@@ -58,6 +58,8 @@ services:
       - PRODUCT_SLUG=gestiolibra
       - PRODUCT_NAME=Gestiolibra
       - FEATURES=instancias,smtp,usuarios,salud
+      # Para vender el producto a marca blanca, sumá `marca` (la pestaña «Marca» de cada instancia: nombre, logo, color y Términos propios; pide que la
+      # instancia tenga libracore >= v1.206.0 y que el producto monte las rutas de la marca): FEATURES=instancias,smtp,usuarios,salud,marca. Ver el README.
       # Para sumar «Apariencia» (el tema de la suite): FEATURES=instancias,smtp,usuarios,salud,apariencia. Se autentica con el token
       # de servicio de cada instancia (el de su compose, ADR-071 de libracore; el LIBRA_SERVICE_TOKEN de /etc/<producto>-admin.env
       # es sólo respaldo, ver «Token de servicio por instancia» en el README) y pide que las instancias tengan libracore >= v1.118.0. El tema se guarda junto a ADMIN_PANEL_ESTADO_PATH (el volumen `estado`).

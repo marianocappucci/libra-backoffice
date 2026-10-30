@@ -275,11 +275,42 @@ export type Tema = Record<string, string>
 // Qué pasó con cada instancia. `aplicada` / `al_dia` / `desfasada` son los normales; el resto dice por qué no se pudo:
 //  - detenida: el contenedor no corre (no se intenta);  inalcanzable: corre pero no contesta;
 //  - sin_soporte: contesta pero es una versión sin el endpoint del tema (libracore < v1.118.0): hay que actualizarla;
-//  - rechazada: la instancia contestó 422;  error: cualquier otro fallo.
+//  - rechazada: la instancia contestó 422;  error: cualquier otro fallo;
+//  - marca_propia: la instancia es de un revendedor (feature `marca`) y no se le aplica el tema de la suite: tiene sus colores.
 export type EstadoDeTema =
-  | 'aplicada' | 'al_dia' | 'desfasada' | 'detenida' | 'inalcanzable' | 'sin_soporte' | 'rechazada' | 'error'
+  | 'aplicada' | 'al_dia' | 'desfasada' | 'detenida' | 'inalcanzable' | 'sin_soporte' | 'rechazada' | 'error' | 'marca_propia'
 
 export type ResultadoDeTema = { slug: string; nombre: string; estado: EstadoDeTema; detalle: string }
+
+// La marca de una instancia (feature `marca`; `libracore.marca_router`, ADR-092, y `libracore.terminos_propios`, ADR-093). Es de UNA
+// instancia, no de la suite: a diferencia del tema, no se empuja a todas.
+export type MarcaDeInstancia = {
+  /** `false` = la instancia usa la marca de su producto. */
+  propia: boolean
+  nombre: string
+  nombre_corto: string
+  /** `#rrggbb` o vacío. */
+  color: string
+  /** Ruta del logo en la instancia (con su `?v=`), o vacío. */
+  logo: string
+  /** Si tiene Términos propios cargados. Con marca propia y sin ellos, la instancia queda frenada para sus usuarios. */
+  terminos_propios: boolean
+}
+
+/** Los Términos propios de la instancia. El texto NO viene: lo ve quien entra a ella; acá sólo versión, vigencia y huella. */
+export type TerminosDeInstancia = {
+  cargados: boolean
+  version: string
+  vigente_desde: string
+  hash: string
+  caracteres: number
+}
+
+export type EstadoDeMarca = { marca: MarcaDeInstancia; terminos: TerminosDeInstancia; producto?: string }
+
+/** Los códigos con que el backoffice rechaza algo que dejaría a los usuarios de la instancia sin poder entrar (`detail.code`). */
+export const CODIGO_TERMINOS_PRIMERO = 'terminos_primero'
+export const CODIGO_QUEDARIA_FRENADA = 'quedaria_frenada'
 
 export const backoffice = {
   apariencia: {
@@ -363,3 +394,5 @@ export const rutaUsuarios = (slug: string) => `/api/instancias/${slug}/usuarios`
 // demo de un producto es una instancia más y sus códigos no valen en otra.
 export const rutaCodigosDemo = (slug: string) =>
   `/api/instancias/${slug}/demo-codigos`
+// La marca y los términos propios de la instancia: por instancia, porque son de un cliente y no de la suite.
+export const rutaMarca = (slug: string) => `/api/instancias/${slug}/marca`
