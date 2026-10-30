@@ -47,6 +47,7 @@ y nunca sale a internet.
 | `usuarios` | Usuarios **de una instancia**: alta, edición, baja lógica, borrado y reset de contraseña ajena | HTTP |
 | `salud` | Versión y arranque del backoffice + qué instancias contestan | ambos |
 | `apariencia` | El **tema de la suite**: los colores que el superadmin elige para TODAS las instancias del producto (ADR-007 de `libra-ui`) | HTTP |
+| `marca` | La **marca de UNA instancia** para venderla a marca blanca: nombre, logo, color y Términos propios (ADR-092 y ADR-093 de `libracore`) | HTTP |
 
 Se declaran por entorno: `FEATURES=instancias,smtp,usuarios,salud`.
 
@@ -69,6 +70,34 @@ reciben el tema al darlas de alta (mejor esfuerzo; si no contestan todavía, fig
 | `TEMA_INSTANCIA_PATH` | La ruta del tema en cada instancia. Por defecto `/api/tema` (la misma en los seis productos). |
 
 Se autentica contra cada instancia con su token de servicio, como `smtp` y `usuarios` (ver «Token de servicio por instancia»).
+
+**Una instancia con marca propia no recibe el tema de la suite** (ver `marca`, abajo): antes de empujar o comparar, el backoffice le pregunta
+`GET /api/marca` y, si es `propia`, la figura como `marca propia` y no la toca. Una instancia que no contesta esa pregunta (vieja, caída) se trata
+como «sin marca» y sigue el camino de siempre.
+
+### `marca`: la marca de una instancia (marca blanca)
+
+Es de **una** instancia, no de la suite: es la pestaña «Marca» de la ficha de cada instancia (sólo si el producto tiene la feature), y cada
+acción le habla a *esa* instancia, que es la que guarda todo en su `config.json` y su volumen (`libracore.marca_router` y
+`libracore.terminos_propios`, `libracore` ≥ v1.206.0). A diferencia de «Apariencia», nada se empuja a las demás.
+
+**El orden importa: primero los términos, después la marca.** Con marca propia la instancia *tiene que* tener Términos propios (ADR-030 de
+`libraauth`); si no los tiene queda frenada y sus usuarios no pueden entrar. Por eso guardar el nombre, el color o el logo en una instancia que
+todavía no es de marca propia y no tiene términos se rechaza con `409` (`terminos_primero`), y quitar los términos de una instancia con marca propia
+también (`quedaria_frenada`); en los dos casos, quien opera puede seguir a sabiendas (`sin_terminos` / `?confirmar=true`). Los términos no se
+pueden releer: la instancia devuelve versión, vigencia y huella, no el texto.
+
+| Ruta (`/api/instancias/{slug}/marca…`) | Qué hace |
+|---|---|
+| `GET` | La marca y los términos de la instancia |
+| `PUT` | Nombre, nombre corto y color |
+| `POST /logo`, `DELETE /logo`, `GET /logo` | Subir (multipart, hasta 1 MB), quitar y ver el logo (la vista previa la sirve este backoffice, detrás de la sesión) |
+| `PUT /terminos`, `DELETE /terminos` | Cargar o quitar los Términos propios |
+| `DELETE` | Volver a la marca del producto (se lleva también los términos) |
+
+| Variable | Qué es |
+|---|---|
+| `MARCA_INSTANCIA_PATH` | La ruta de la marca en cada instancia. Por defecto `/api/marca` (la misma en los productos que montan `marca_router`). |
 
 ## Ciclo de vida de una instancia
 

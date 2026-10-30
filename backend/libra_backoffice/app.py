@@ -36,7 +36,7 @@ from libracore.spa import archivo_publico
 
 from .cliente_instancia import ClienteInstancia
 from .inventario import construir_inventario
-from .routers import apariencia, auth, config_instancia, instancias, salud, seguridad
+from .routers import apariencia, auth, config_instancia, instancias, marca, salud, seguridad
 from .settings import Settings, cargar_settings
 from .tema_suite import AlmacenDeTema
 
@@ -142,6 +142,7 @@ def create_app(
     app.include_router(config_instancia.router_demos)
     app.include_router(config_instancia.router_reenvio_correo)
     app.include_router(apariencia.router)
+    app.include_router(marca.router)
     app.include_router(salud.router)
 
     _montar_frontend(app, frontend_dist)

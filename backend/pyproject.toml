@@ -47,7 +47,8 @@ dependencies = [
     # v0.52.0 -> v0.53.0 (2026-10-20): la marca Secure de la cookie de sesion es configurable (LIBRAAUTH_COOKIE_SECURE, ADR-026); sin la variable no cambia nada. Sin migracion.
     # v0.53.0 -> v0.54.0 (2026-10-21): en un nodo de LibraEdge los usuarios son los del central (ADR-027); fuera de un nodo no cambia nada. Sin migracion.
     # v0.54.0 -> v0.55.0 (2026-10-21): en un nodo de LibraEdge no se pide captcha y la IP del bloqueo es el par directo (ADR-028); fuera de un nodo no cambia nada. Sin migracion.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.55.0",
+    # v0.55.0 -> v0.56.0 (2026-10-28): `verificar_captcha` publica para rutas propias del producto (ADR-029). Sin migracion.
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.56.0",
     # `admin.services` (inventario y ciclo de vida de instancias) y
     # `security_headers`. v1.3.0: el alta ya no elige un puerto que otro
     # producto del host tiene bindeado, y hace rollback del directorio si el
@@ -198,7 +199,24 @@ dependencies = [
     # v1.192.1 -> v1.194.0 (2026-10-25): unir-bases con libraauth en el core (ADR-082), GestioLibra y MedLibra de una sola base y tabla de modulos del producto (ADR-083). Sin migracion.
     # v1.194.0 -> v1.195.0 (2026-10-25): conexion del nodo sin PuertoDeVentas, 202 unico y alta sin la variable del core (ADR-084). Sin migracion.
     # v1.195.0 -> v1.195.1 (2026-10-25): sin los historicos del core de GestioLibra y MedLibra ni la excepcion de VentaLibra (addendum ADR-084). Sin migracion.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.195.1",
+    # v1.195.1 -> v1.196.0 (2026-10-26): indices de ajuste (ADR-085, migracion 0030), periodos de contrato y mora (ADR-086).
+    # v1.196.0 -> v1.196.1 (2026-10-26): periodo_anclado y sumar_meses publicos (addendum ADR-086). Sin migracion.
+    # v1.196.1 -> v1.196.2 (2026-10-26): el dolar A 3500 de un fin de semana o feriado es el del ultimo dia habil (addendum ADR-085). Sin migracion.
+    # v1.196.2 -> v1.197.0 (2026-10-26): recibo de un cobro del libro de terceros, por cuenta y orden de (ADR-087). Sin migracion.
+    # v1.197.0 -> v1.197.1 (2026-10-26): anular_recibo en la transaccion de quien llama (addendum ADR-087). Sin migracion.
+    # v1.197.1 -> v1.197.2 (2026-10-26): el lector de migraciones falla cerrado ante configure(**...). Sin migracion.
+    # v1.197.2 -> v1.197.3 (2026-10-27): HTTPS forzado y HTTP/2 tras el alta con certificado (NPM 2.16). Sin migracion.
+    # v1.197.3 -> v1.198.0 (2026-10-27): la moneda del libro de terceros y del recibo (ADR-088). Migracion 0031 aditiva.
+    # v1.198.0 -> v1.199.0 (2026-10-27): el producto puede impedir la baja de un cliente (impide_desactivar). Sin migracion.
+    # v1.199.0 -> v1.200.0 (2026-10-27): el respaldo nocturno distingue fallo de no corrio (addendum ADR-075). Sin migracion.
+    # v1.200.0 -> v1.201.0 (2026-10-28): nota de credito con motivo y emision sin HTTP (ADR-089). Sin migracion.
+    # v1.201.0 -> v1.202.0 (2026-10-28): libracore.avisos: WhatsApp por Evolution, mail y registro (ADR-090). Migracion 0032 (avisos_envios).
+    # v1.202.0 -> v1.202.1 (2026-10-28): avisos: la demo no manda mails y espera entre reintentos (addendum ADR-090). Sin migracion.
+    # v1.202.1 -> v1.204.0 (2026-10-28): un aviso por un solo canal y demos sin mails (ADR-090 y ADR-091). Sin migracion.
+    # v1.204.0 -> v1.206.0 (2026-10-30): la marca de la instancia (v1.205.0, ADR-092) y sus Términos propios (v1.206.0, ADR-093) para vender a marca blanca; este producto habla con esas rutas (feature `marca`) y los tests montan los routers reales. Sin migracion.
+    # v1.206.0 -> v1.207.0 (2026-10-30): el index.html sale con la marca de la instancia (ADR-095) y el resguardo lleva el nombre de la marca (ADR-094). Sin migracion.
+    # v1.207.0 -> v1.207.1 (2026-10-30): la marca y los Terminos propios se leen sin el almacen de secretos (addendum ADR-095); v1.207.0 trae el index.html con la marca (ADR-095) y la carpeta del resguardo con el nombre de la marca (ADR-094). Sin migracion.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.207.1",
     "fastapi>=0.111,<1",
     "uvicorn[standard]>=0.30,<1",
     # El control plane le habla a cada instancia por HTTP.

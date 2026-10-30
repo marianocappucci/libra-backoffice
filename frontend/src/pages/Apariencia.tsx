@@ -30,6 +30,8 @@ const ETIQUETA: Record<EstadoDeTema, { texto: string; mala: boolean }> = {
   sin_soporte: { texto: 'Hay que actualizarla', mala: true },
   rechazada: { texto: 'Rechazada', mala: true },
   error: { texto: 'Error', mala: true },
+  // No es un problema: la instancia es de un revendedor y tiene sus propios colores (feature `marca`).
+  marca_propia: { texto: 'Marca propia', mala: false },
 }
 
 function Estado({ r }: { r: ResultadoDeTema }) {
