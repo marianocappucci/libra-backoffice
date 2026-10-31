@@ -10,6 +10,7 @@
 // de logo...): su 422 llega acá tal cual y se muestra donde se escribió.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, ImageUp, Save, Trash2 } from 'lucide-react'
+import { acentoLegibleDeMarca, normalizarHex } from 'libra-ui/tema'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -203,6 +204,12 @@ export function MarcaDeLaInstancia({ slug }: { slug: string }) {
   const versionDelLogo = marca.logo ? new URLSearchParams(marca.logo.split('?')[1] ?? '').get('v') : null
   const logoVisible = marca.logo ? `${base}/logo${versionDelLogo ? `?v=${encodeURIComponent(versionDelLogo)}` : ''}` : null
   const colorInvalido = color.trim() !== '' && !COLOR.test(color.trim())
+  // Lo que la instancia va a dibujar de verdad: el kit corrige el color que no se distingue del fondo en claro y en oscuro (ADR-102) o lo
+  // descarta si habría que cambiarlo demasiado. Se calcula con la misma función, así el aviso y la vista previa no se pueden separar.
+  const colorElegido = COLOR.test(color.trim()) ? normalizarHex(color) : null
+  const colorAplicado = colorElegido ? acentoLegibleDeMarca(colorElegido) : undefined
+  const colorDescartado = colorElegido !== null && colorAplicado === undefined
+  const colorCorregido = colorElegido !== null && colorAplicado !== undefined && colorAplicado !== colorElegido
 
   return (
     <div className="space-y-6">
@@ -305,7 +312,7 @@ export function MarcaDeLaInstancia({ slug }: { slug: string }) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <VistaPrevia nombre={nombre} color={color} logo={logoVisible} />
+          <VistaPrevia nombre={nombre} color={colorElegido === null ? color : (colorAplicado ?? '')} logo={logoVisible} />
 
           <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void guardarMarca() }}>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -328,6 +335,18 @@ export function MarcaDeLaInstancia({ slug }: { slug: string }) {
                 <Input id="marca-color" value={color} maxLength={7} placeholder="#336699" aria-invalid={colorInvalido} onChange={(e) => setColor(e.target.value)} />
               </div>
               {colorInvalido && <p className="text-xs text-destructive">Se espera #rrggbb.</p>}
+              {colorCorregido && (
+                <p className="text-xs text-amber-700 dark:text-amber-400" role="status">
+                  Este color no se distingue bien del fondo en modo claro y oscuro: la instancia va a usar <strong>{colorAplicado}</strong>, el tono
+                  más parecido que sí se lee. Elegí otro si querés exactamente el que escribiste.
+                </p>
+              )}
+              {colorDescartado && (
+                <p className="text-xs text-amber-700 dark:text-amber-400" role="status">
+                  Este color se confunde con el fondo (casi blanco o casi negro) y no se puede corregir sin cambiarlo demasiado: la instancia{' '}
+                  <strong>no lo va a usar</strong> y los botones quedan con el color del producto. Elegí uno más intenso.
+                </p>
+              )}
             </div>
 
             {errorMarca && <p className="text-sm font-medium text-destructive">{errorMarca}</p>}
