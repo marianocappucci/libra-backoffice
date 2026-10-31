@@ -299,6 +299,42 @@ describe('1. los términos primero', () => {
     expect(screen.getByRole('button', { name: /guardar marca/i })).toBeDisabled()
   })
 
+  it('un color que el kit corrige avisa con qué tono lo va a mostrar la instancia', async () => {
+    conSesion(instanciaConEstado({ terminos: TERMINOS_PUESTOS }))
+    montar('/instancias/acme')
+    const u = usuario()
+    await irAMarca(u)
+    await u.type(await screen.findByLabelText(/^nombre$/i), 'Comercial Modelo')
+    await u.type(screen.getByLabelText(/color de la marca/i), '#1f5e8c')
+
+    expect(screen.getByText(/no se distingue bien del fondo/i)).toBeInTheDocument()
+    expect(screen.getByText('#26638f')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /guardar marca/i })).toBeEnabled()
+  })
+
+  it('un color casi blanco avisa que la instancia no lo va a usar', async () => {
+    conSesion(instanciaConEstado({ terminos: TERMINOS_PUESTOS }))
+    montar('/instancias/acme')
+    const u = usuario()
+    await irAMarca(u)
+    await u.type(await screen.findByLabelText(/^nombre$/i), 'Comercial Modelo')
+    await u.type(screen.getByLabelText(/color de la marca/i), '#fafafa')
+
+    expect(screen.getByText(/no lo va a usar/i)).toBeInTheDocument()
+  })
+
+  it('un color legible no avisa nada', async () => {
+    conSesion(instanciaConEstado({ terminos: TERMINOS_PUESTOS }))
+    montar('/instancias/acme')
+    const u = usuario()
+    await irAMarca(u)
+    await u.type(await screen.findByLabelText(/^nombre$/i), 'Comercial Modelo')
+    await u.type(screen.getByLabelText(/color de la marca/i), '#e8590c')
+
+    expect(screen.queryByText(/no se distingue bien del fondo/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/no lo va a usar/i)).not.toBeInTheDocument()
+  })
+
   it('una instancia que ya es propia se puede retocar sin pedir los términos', async () => {
     const i = instanciaConEstado({ marca: { propia: true, nombre: 'Gestión Sur' } })
     conSesion(i)
