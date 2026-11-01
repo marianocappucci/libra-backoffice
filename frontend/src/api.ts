@@ -312,7 +312,67 @@ export type EstadoDeMarca = { marca: MarcaDeInstancia; terminos: TerminosDeInsta
 export const CODIGO_TERMINOS_PRIMERO = 'terminos_primero'
 export const CODIGO_QUEDARIA_FRENADA = 'quedaria_frenada'
 
+// La consola de revendedores (feature `revendedores`). Diseño: `consola-de-revendedores-diseno`, en el wiki.
+export type InstanciaDeRevendedor = { producto: string; slug: string }
+
+export type EntradaDeHistorial = { cuando: string; quien: string; accion: string; detalle: string }
+
+export type Revendedor = {
+  id: string
+  nombre: string
+  contacto: string
+  notas: string
+  productos: string[]
+  instancias: InstanciaDeRevendedor[]
+  // Las que suspendió la consola: son las únicas que desbloquear reactiva.
+  suspendidas: InstanciaDeRevendedor[]
+  estado: 'activo' | 'bloqueado'
+  mensaje: string
+  historial: EntradaDeHistorial[]
+}
+
+export type RevendedorIn = Pick<Revendedor, 'nombre' | 'contacto' | 'notas' | 'productos'>
+
+export type InstanciaDelCatalogo = {
+  slug: string
+  nombre: string
+  domain: string
+  plan: string
+  estado: string
+  servicio_estado: ServicioEstado
+  revendedor: string
+}
+
+export type ProductoDelCatalogo = {
+  slug: string
+  nombre: string
+  alcanzable: boolean
+  detalle: string
+  instancias: InstanciaDelCatalogo[]
+}
+
+export type ResultadoDeBloqueo = InstanciaDeRevendedor & {
+  resultado: 'suspendida' | 'ya_estaba_suspendida' | 'activada' | 'sin_cambios' | 'fallo'
+  detalle: string
+}
+
+export type RespuestaDeBloqueo = { revendedor: Revendedor; resultados: ResultadoDeBloqueo[] }
+
 export const backoffice = {
+  revendedores: {
+    listar: () => api.get<{ revendedores: Revendedor[] }>('/api/revendedores'),
+    catalogo: () => api.get<{ productos: ProductoDelCatalogo[] }>('/api/revendedores/catalogo'),
+    detalle: (id: string) => api.get<Revendedor>(`/api/revendedores/${id}`),
+    crear: (datos: RevendedorIn) => api.post<Revendedor>('/api/revendedores', datos),
+    editar: (id: string, datos: RevendedorIn) => api.put<Revendedor>(`/api/revendedores/${id}`, datos),
+    asignar: (id: string, instancia: InstanciaDeRevendedor) =>
+      api.post<Revendedor>(`/api/revendedores/${id}/instancias`, instancia),
+    quitar: (id: string, { producto, slug }: InstanciaDeRevendedor) =>
+      api.del<Revendedor>(`/api/revendedores/${id}/instancias/${producto}/${slug}`),
+    bloquear: (id: string, confirmar: string, mensaje: string) =>
+      api.post<RespuestaDeBloqueo>(`/api/revendedores/${id}/bloquear`, { confirmar, mensaje }),
+    desbloquear: (id: string) => api.post<RespuestaDeBloqueo>(`/api/revendedores/${id}/desbloquear`),
+  },
   apariencia: {
     // `producto` es el `PRODUCT_SLUG` de este backoffice; ausente en un backend viejo (la pantalla dibuja entonces los defectos neutros).
     leer: () => api.get<{ tema: Tema; producto?: string }>('/api/apariencia'),
