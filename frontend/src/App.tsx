@@ -7,6 +7,7 @@ import { Login } from './pages/Login'
 import { Apariencia } from './pages/Apariencia'
 import { Instancia } from './pages/Instancia'
 import { Instancias } from './pages/Instancias'
+import { Revendedor, Revendedores } from './pages/Revendedores'
 import { Salud } from './pages/Salud'
 import { Seguridad } from './pages/Seguridad'
 
@@ -29,6 +30,13 @@ function FichaDeInstancia() {
   return <Instancia conMarca={user?.features?.includes('marca') ?? false} />
 }
 
+/** El inicio: en la consola de revendedores no hay instancias propias, y el Layout siempre entra por `/instancias`. */
+function PantallaDeInstancias() {
+  const { user } = useAuth()
+  if (user?.features?.includes('revendedores')) return <Navigate to="/revendedores" replace />
+  return <Instancias />
+}
+
 export default function App() {
   return (
     <Routes>
@@ -39,7 +47,7 @@ export default function App() {
         path="/instancias"
         element={
           <RutaProtegida>
-            <Instancias />
+            <PantallaDeInstancias />
           </RutaProtegida>
         }
       />
@@ -48,6 +56,22 @@ export default function App() {
         element={
           <RutaProtegida>
             <FichaDeInstancia />
+          </RutaProtegida>
+        }
+      />
+      <Route
+        path="/revendedores"
+        element={
+          <RutaProtegida>
+            <Revendedores />
+          </RutaProtegida>
+        }
+      />
+      <Route
+        path="/revendedores/:id"
+        element={
+          <RutaProtegida>
+            <Revendedor />
           </RutaProtegida>
         }
       />

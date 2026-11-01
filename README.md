@@ -48,8 +48,25 @@ y nunca sale a internet.
 | `salud` | Versión y arranque del backoffice + qué instancias contestan | ambos |
 | `apariencia` | El **tema de la suite**: los colores que el superadmin elige para TODAS las instancias del producto (ADR-007 de `libra-ui`) | HTTP |
 | `marca` | La **marca de UNA instancia** para venderla a marca blanca: nombre, logo, color y Términos propios (ADR-092 y ADR-093 de `libracore`) | HTTP |
+| `revendedores` | La **consola de revendedores**: un despliegue aparte, de ningún producto. Va sola (ver abajo) | HTTP, a los backoffices |
 
 Se declaran por entorno: `FEATURES=instancias,smtp,usuarios,salud`.
+
+### `revendedores`: la consola
+
+Quiénes son los revendedores, qué productos pueden vender, qué instancias son suyas, y el bloqueo. Es **un despliegue más de esta imagen**, de
+ningún producto, y **sólo por túnel SSH**: puede cortarles el servicio a clientes de cualquier producto. La marca, los planes y el alta siguen
+en el backoffice de cada producto. Diseño: `consola-de-revendedores-diseno`, en el wiki.
+
+Un proceso no puede atender a varios productos (`libracore.admin.services` guarda estado global de uno), así que la consola le pide el trabajo a
+cada backoffice por `stack_stack-net`, en `http://<producto>-admin:8000/api/consola`. Esa ruta sólo lista instancias y las suspende o activa.
+
+| Dónde | Entorno |
+|---|---|
+| **Cada backoffice** | `CONSOLA_TOKEN`. Sin él, `/api/consola` da 404 y el backoffice queda como estaba |
+| **La consola** | `FEATURES=revendedores`, el mismo `CONSOLA_TOKEN` y `CONSOLA_PRODUCTOS=ventalibra:VentaLibra,libracargo:LibraCargo`. No lleva `REPO_ROOT`, ni `docker.sock`, ni repos montados |
+
+🔴 **Desbloquear reactiva sólo lo que suspendió la consola.** Una instancia que ya estaba suspendida, por falta de pago por ejemplo, no vuelve.
 
 ### `apariencia`: el tema de la suite
 
