@@ -398,6 +398,11 @@ def test_la_consola_arranca_sin_repo_de_producto():
     assert str(settings.revendedores_path) == "/var/lib/libra-backoffice/revendedores.json"
 
 
+def test_un_producto_sin_backoffice_declara_su_url():
+    settings = cargar_settings({**ENTORNO, "CONSOLA_PRODUCTOS": "ventalibra:VentaLibra,librabot:LibraBot:http://librabot-librabot-1:8790"})
+    assert [p.url for p in settings.consola_productos] == ["http://ventalibra-admin:8000", "http://librabot-librabot-1:8790"]
+
+
 @pytest.mark.parametrize("cambio", [
     {"CONSOLA_TOKEN": ""}, {"CONSOLA_PRODUCTOS": ""}, {"CONSOLA_PRODUCTOS": "sin-nombre"},
     {"FEATURES": "revendedores,instancias"},

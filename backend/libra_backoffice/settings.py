@@ -148,13 +148,15 @@ def _leer_features(crudo: str) -> frozenset[str]:
 
 def _leer_productos_de_consola(crudo: str) -> tuple[ProductoDeConsola, ...]:
     """`CONSOLA_PRODUCTOS=ventalibra:VentaLibra,libracargo:LibraCargo`. La URL sale del contenedor de cada backoffice
-    (`<slug>-admin`, en `stack_stack-net`): el tráfico de control nunca sale a internet."""
+    (`<slug>-admin`, en `stack_stack-net`): el tráfico de control nunca sale a internet. Un producto sin backoffice
+    (LibraBot) la declara: `librabot:LibraBot:http://librabot-librabot-1:8790`."""
     productos = []
     for parte in (p.strip() for p in crudo.split(",") if p.strip()):
-        slug, separador, nombre = parte.partition(":")
+        slug, separador, resto = parte.partition(":")
+        nombre, _, url = resto.partition(":")
         if not separador or not slug.strip() or not nombre.strip():
             raise ConfiguracionInvalida(f"CONSOLA_PRODUCTOS: se espera slug:Nombre, no {parte!r}.")
-        productos.append(ProductoDeConsola(slug.strip(), nombre.strip(), f"http://{slug.strip()}-admin:8000"))
+        productos.append(ProductoDeConsola(slug.strip(), nombre.strip(), url.strip() or f"http://{slug.strip()}-admin:8000"))
     return tuple(productos)
 
 
