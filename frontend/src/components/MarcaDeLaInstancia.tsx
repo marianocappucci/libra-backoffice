@@ -325,9 +325,9 @@ export function MarcaDeLaInstancia({ slug }: { slug: string }) {
                 <Input id="marca-corto" value={nombreCorto} maxLength={12} placeholder="GSur" onChange={(e) => setNombreCorto(e.target.value)} />
               </div>
             </div>
-            <div className="grid gap-2 sm:max-w-xs">
+            <div className="grid gap-2">
               <Label htmlFor="marca-color">Color de la marca</Label>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 sm:max-w-xs">
                 <input
                   type="color" aria-label="Elegir color" value={COLOR.test(color.trim()) ? color.trim() : '#336699'}
                   onChange={(e) => setColor(e.target.value)} className="h-9 w-12 cursor-pointer rounded border"
@@ -336,13 +336,13 @@ export function MarcaDeLaInstancia({ slug }: { slug: string }) {
               </div>
               {colorInvalido && <p className="text-xs text-destructive">Se espera #rrggbb.</p>}
               {colorCorregido && (
-                <p className="text-xs text-amber-700 dark:text-amber-400" role="status">
+                <p className="max-w-prose text-xs text-amber-700 dark:text-amber-400" role="status">
                   Este color no se distingue bien del fondo en modo claro y oscuro: la instancia va a usar <strong>{colorAplicado}</strong>, el tono
                   más parecido que sí se lee. Elegí otro si querés exactamente el que escribiste.
                 </p>
               )}
               {colorDescartado && (
-                <p className="text-xs text-amber-700 dark:text-amber-400" role="status">
+                <p className="max-w-prose text-xs text-amber-700 dark:text-amber-400" role="status">
                   Este color se confunde con el fondo (casi blanco o casi negro) y no se puede corregir sin cambiarlo demasiado: la instancia{' '}
                   <strong>no lo va a usar</strong> y los botones quedan con el color del producto. Elegí uno más intenso.
                 </p>
