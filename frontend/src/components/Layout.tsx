@@ -3,7 +3,7 @@
 // El branding es genérico a propósito: la misma imagen sirve a los seis
 // productos y el nombre real llega por `/api/salud`. Poner "Gestiolibra" acá
 // obligaría a una imagen por producto, que es justo lo que este repo evita.
-import { Activity, Palette, Server, ShieldCheck } from 'lucide-react'
+import { Activity, Handshake, Palette, Server, ShieldCheck } from 'lucide-react'
 import { createLayout } from 'libra-ui/Layout'
 
 import { useAuth } from '../auth'
@@ -15,8 +15,10 @@ export const Layout = createLayout<Superadmin>({
   icon: Server,
   homeTo: '/instancias',
   navItems: [
-    { to: '/instancias', label: 'Instancias', icon: Server },
-    { to: '/salud', label: 'Salud', icon: Activity },
+    // La consola de revendedores no tiene instancias ni salud propias: sus features son sólo `revendedores`.
+    { to: '/revendedores', label: 'Revendedores', icon: Handshake, module: 'revendedores' },
+    { to: '/instancias', label: 'Instancias', icon: Server, module: 'instancias' },
+    { to: '/salud', label: 'Salud', icon: Activity, module: 'salud' },
     // Sólo en los productos que la tienen (feature `apariencia`): el tema de la suite, ADR-007 de libra-ui.
     { to: '/apariencia', label: 'Apariencia', icon: Palette, module: 'apariencia' },
     { to: '/seguridad', label: 'Seguridad', icon: ShieldCheck },

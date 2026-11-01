@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 FEATURES_VALIDAS = frozenset(
-    {"instancias", "smtp", "usuarios", "salud", "demos", "reenvio-correo", "apariencia", "marca"}
+    {"instancias", "smtp", "usuarios", "salud", "demos", "reenvio-correo", "apariencia", "marca", "revendedores"}
 )
 
 #: Mismo vocabulario que ya tenía el `Select` de rol de `Usuarios` de
@@ -30,6 +30,15 @@ ROLES_POR_DEFECTO: tuple[str, ...] = ("staff", "admin")
 
 class ConfiguracionInvalida(RuntimeError):
     """El entorno no alcanza para levantar el backoffice."""
+
+
+@dataclass(frozen=True)
+class ProductoDeConsola:
+    """Un backoffice al que le habla la consola de revendedores."""
+
+    slug: str
+    nombre: str
+    url: str
 
 
 @dataclass(frozen=True)
@@ -76,6 +85,11 @@ class Settings:
     # ver `cliente_instancia.py`). Vacío es válido.
     service_token: str = ""
     timeout_instancia: float = 5.0
+    # La consola de revendedores. En cada backoffice, `consola_token` abre `/api/consola`; sin él esa ruta da 404.
+    # En la consola (feature `revendedores`), es con lo que se autentica ante los backoffices de `consola_productos`.
+    consola_token: str = ""
+    consola_productos: tuple[ProductoDeConsola, ...] = ()
+    revendedores_path: Path = Path("/var/lib/libra-backoffice/revendedores.json")
     # Vocabulario de roles de ESTE producto — no es el mismo en toda la
     # familia (`("admin", "staff")` en seis, `("admin", "operador", "cajero")`
     # en Contalibra, con `"mozo"` sumado en Restolibra — ver el docstring de
@@ -132,6 +146,26 @@ def _leer_features(crudo: str) -> frozenset[str]:
     return frozenset(features)
 
 
+def _leer_productos_de_consola(crudo: str) -> tuple[ProductoDeConsola, ...]:
+    """`CONSOLA_PRODUCTOS=ventalibra:VentaLibra,libracargo:LibraCargo`. La URL sale del contenedor de cada backoffice
+    (`<slug>-admin`, en `stack_stack-net`): el tráfico de control nunca sale a internet."""
+    productos = []
+    for parte in (p.strip() for p in crudo.split(",") if p.strip()):
+        slug, separador, nombre = parte.partition(":")
+        if not separador or not slug.strip() or not nombre.strip():
+            raise ConfiguracionInvalida(f"CONSOLA_PRODUCTOS: se espera slug:Nombre, no {parte!r}.")
+        productos.append(ProductoDeConsola(slug.strip(), nombre.strip(), f"http://{slug.strip()}-admin:8000"))
+    return tuple(productos)
+
+
+def _ruta_de_revendedores(env: dict) -> Path:
+    """Junto al archivo de estado del login, que ya vive en el volumen persistente."""
+    estado = (env.get("ADMIN_PANEL_ESTADO_PATH") or "").strip()
+    if estado:
+        return Path(estado).parent / "revendedores.json"
+    return Path("/var/lib/libra-backoffice/revendedores.json")
+
+
 def _ruta_del_tema(env: dict) -> Path:
     """`TEMA_PATH` si está; si no, junto al archivo de estado del login (`ADMIN_PANEL_ESTADO_PATH`), que ya vive en el volumen persistente;
     si tampoco, el volumen por defecto del compose."""
@@ -158,6 +192,21 @@ def cargar_settings(env: dict | None = None) -> Settings:
         raise ConfiguracionInvalida("Falta PRODUCT_SLUG.")
 
     features = _leer_features(env.get("FEATURES", ""))
+    consola_token = (env.get("CONSOLA_TOKEN") or "").strip()
+
+    # La consola no es de ningún producto: no tiene repo ni instancias propias. Va sola para que un backoffice de
+    # producto nunca cargue revendedores, ni la consola monte lo que no necesita.
+    if "revendedores" in features:
+        if features != {"revendedores"}:
+            raise ConfiguracionInvalida("La feature `revendedores` va sola: es la consola, no un backoffice de producto.")
+        productos = _leer_productos_de_consola(env.get("CONSOLA_PRODUCTOS", ""))
+        if not productos or not consola_token:
+            raise ConfiguracionInvalida("La consola necesita CONSOLA_PRODUCTOS y CONSOLA_TOKEN.")
+        return Settings(
+            product_slug=slug, product_name=(env.get("PRODUCT_NAME") or slug.title()).strip(), features=features,
+            consola_token=consola_token, consola_productos=productos, revendedores_path=_ruta_de_revendedores(env),
+            timeout_instancia=float(env.get("TIMEOUT_INSTANCIA") or 5.0),
+        )
 
     # El inventario hace falta aunque sólo esté `smtp`: sin lista de instancias
     # no hay a cuál configurarle el correo.
@@ -200,6 +249,7 @@ def cargar_settings(env: dict | None = None) -> Settings:
         limites_instancia_path=(env.get("LIMITES_INSTANCIA_PATH") or "/api/limites/sucursales").strip(),
         adicionales_instancia_path=(env.get("ADICIONALES_INSTANCIA_PATH") or "/api/adicionales").strip(),
         service_token=token,
+        consola_token=consola_token,
         timeout_instancia=float(env.get("TIMEOUT_INSTANCIA") or 5.0),
         usuarios_roles=_leer_roles(env.get("USERS_ROLES", "")),
     )

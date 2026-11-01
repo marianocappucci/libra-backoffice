@@ -36,7 +36,9 @@ from libracore.spa import archivo_publico
 
 from .cliente_instancia import ClienteInstancia
 from .inventario import construir_inventario
-from .routers import apariencia, auth, config_instancia, instancias, marca, salud, seguridad
+from .almacen_revendedores import AlmacenDeRevendedores
+from .cliente_consola import ClienteConsola
+from .routers import apariencia, auth, config_instancia, consola, instancias, marca, revendedores, salud, seguridad
 from .settings import Settings, cargar_settings
 from .tema_suite import AlmacenDeTema
 
@@ -99,6 +101,12 @@ def create_app(
         timeout=settings.timeout_instancia,
     )
 
+    # La consola de revendedores (feature `revendedores`): de quién es cada instancia, y el corte del servicio. Le habla
+    # a los backoffices porque un proceso no puede atender a varios productos (`revendedores.py`).
+    app.state.almacen_revendedores = AlmacenDeRevendedores(settings.revendedores_path)
+    app.state.cliente_consola = ClienteConsola(
+        settings.consola_productos, settings.consola_token, timeout=settings.timeout_instancia)
+
     @app.api_route("/health", methods=["GET", "HEAD"], include_in_schema=False)
     def health():
         """Sin auth: la usan el healthcheck de Docker y el proxy.
@@ -144,6 +152,8 @@ def create_app(
     app.include_router(apariencia.router)
     app.include_router(marca.router)
     app.include_router(salud.router)
+    app.include_router(consola.router)
+    app.include_router(revendedores.router)
 
     _montar_frontend(app, frontend_dist)
     return app

@@ -155,5 +155,17 @@ class Inventario:
         )
 
 
-def construir_inventario(settings) -> Inventario:
+class InventarioDeConsola:
+    """La consola de revendedores no tiene instancias propias: las de cada producto las conoce su backoffice."""
+
+    def verificar_scripts(self) -> None:
+        """Sin scripts de producto que importar: `/health` contesta por el proceso."""
+
+    def listar(self) -> list[Instancia]:
+        return []
+
+
+def construir_inventario(settings):
+    if settings.tiene("revendedores"):
+        return InventarioDeConsola()
     return Inventario(settings.repo_root, settings.db_filename)
