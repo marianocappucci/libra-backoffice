@@ -159,3 +159,18 @@ describe('un backoffice de producto', () => {
     expect(screen.queryByRole('link', { name: 'Revendedores' })).not.toBeInTheDocument()
   })
 })
+
+describe('la credencial del panel', () => {
+  it('se muestra una sola vez y avisa si ya hay una', async () => {
+    conSesion({
+      'GET /api/revendedores/r1/credencial-panel': () => json({ tiene: false }),
+      'POST /api/revendedores/r1/credencial-panel': () => json({ credencial: 'la-credencial-de-prueba' }),
+    })
+    montar('/revendedores/r1')
+    const u = usuario()
+    expect(await screen.findByText('Todavía no tiene credencial.')).toBeInTheDocument()
+    await u.click(screen.getByRole('button', { name: 'Generar credencial' }))
+    expect(await screen.findByText('la-credencial-de-prueba')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Generar otra' })).toBeInTheDocument()
+  })
+})

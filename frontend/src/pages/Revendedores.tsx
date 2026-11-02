@@ -161,6 +161,8 @@ export function Revendedor() {
   const [confirmar, setConfirmar] = useState('')
   const [mensaje, setMensaje] = useState('')
   const [resultados, setResultados] = useState<ResultadoDeBloqueo[] | null>(null)
+  const [tieneCredencial, setTieneCredencial] = useState(false)
+  const [credencial, setCredencial] = useState('')
 
   const mostrar = useCallback((r: TRevendedor) => {
     setRevendedor(r)
@@ -178,6 +180,7 @@ export function Revendedor() {
     void (async () => {
       try {
         mostrar(await backoffice.revendedores.detalle(id))
+        setTieneCredencial((await backoffice.revendedores.credencialDelPanel(id)).tiene)
         await cargarCatalogo()
       } catch (err) {
         setError(describirError(err))
@@ -340,6 +343,29 @@ export function Revendedor() {
               </Button>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Panel del revendedor</CardTitle>
+          <CardDescription>
+            La credencial con la que el panel público pregunta por este revendedor: sólo ve lo suyo. Se muestra una sola vez, y generar
+            otra corta la anterior.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">{tieneCredencial ? 'Tiene credencial.' : 'Todavía no tiene credencial.'}</p>
+          {credencial && <p className="break-all rounded-md border p-3 font-mono text-sm" role="status">{credencial}</p>}
+          <Button
+            variant="outline" disabled={ocupado}
+            onClick={() => hacer(async () => {
+              setCredencial((await backoffice.revendedores.generarCredencialDelPanel(id)).credencial)
+              setTieneCredencial(true)
+            })}
+          >
+            {tieneCredencial ? 'Generar otra' : 'Generar credencial'}
+          </Button>
         </CardContent>
       </Card>
 
