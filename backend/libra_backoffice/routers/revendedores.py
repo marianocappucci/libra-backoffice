@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from ..almacen_revendedores import AlmacenIlegible
 from ..cliente_consola import BackofficeInalcanzable
 from ..deps import admin_actual, requiere_feature
+from . import panel_revendedor
 
 router = APIRouter(
     prefix="/api/revendedores",
@@ -211,6 +212,27 @@ async def quitar(identificador: str, producto: str, slug: str, request: Request,
         _anotar(revendedor, admin, "instancia quitada", f"{producto}/{slug}")
         request.app.state.almacen_revendedores.guardar(revendedores)
     return revendedor
+
+
+@router.get("/{identificador}/credencial-panel")
+def estado_de_la_credencial(identificador: str, request: Request):
+    _buscar(_leer(request), identificador)
+    return {"tiene": identificador in request.app.state.almacen_revendedores.credenciales()}
+
+
+@router.post("/{identificador}/credencial-panel")
+async def generar_credencial(identificador: str, request: Request, admin: str = Depends(admin_actual)):
+    """La credencial con la que el panel público pregunta por este revendedor. Se muestra **una sola vez**: se guarda su
+    sha256. Generar otra invalida la anterior: es también cómo se corta un panel comprometido."""
+    almacen = request.app.state.almacen_revendedores
+    async with _cerrojo:
+        revendedores = _leer(request)
+        revendedor = _buscar(revendedores, identificador)
+        credencial = secrets.token_urlsafe(32)
+        almacen.guardar_credenciales({**almacen.credenciales(), identificador: panel_revendedor.huella(credencial)})
+        _anotar(revendedor, admin, "credencial del panel generada")
+        almacen.guardar(revendedores)
+    return {"credencial": credencial}
 
 
 @router.post("/{identificador}/bloquear")

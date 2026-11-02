@@ -369,6 +369,9 @@ export const backoffice = {
       api.post<Revendedor>(`/api/revendedores/${id}/instancias`, instancia),
     quitar: (id: string, { producto, slug }: InstanciaDeRevendedor) =>
       api.del<Revendedor>(`/api/revendedores/${id}/instancias/${producto}/${slug}`),
+    credencialDelPanel: (id: string) => api.get<{ tiene: boolean }>(`/api/revendedores/${id}/credencial-panel`),
+    generarCredencialDelPanel: (id: string) =>
+      api.post<{ credencial: string }>(`/api/revendedores/${id}/credencial-panel`),
     bloquear: (id: string, confirmar: string, mensaje: string) =>
       api.post<RespuestaDeBloqueo>(`/api/revendedores/${id}/bloquear`, { confirmar, mensaje }),
     desbloquear: (id: string) => api.post<RespuestaDeBloqueo>(`/api/revendedores/${id}/desbloquear`),
