@@ -410,3 +410,98 @@ def test_un_producto_sin_backoffice_declara_su_url():
 def test_una_consola_mal_configurada_no_arranca(cambio):
     with pytest.raises(ConfiguracionInvalida):
         cargar_settings({**ENTORNO, **cambio})
+
+
+# ── lo que ve el panel público del revendedor ──────────────────────────────
+
+
+def _credencial(consola, identificador):
+    respuesta = consola.post(f"/api/revendedores/{identificador}/credencial-panel")
+    assert respuesta.status_code == 200, respuesta.text
+    return {"X-Revendedor-Credencial": respuesta.json()["credencial"]}
+
+
+def _dos_revendedores(consola):
+    sur = _alta(consola)
+    norte = _alta(consola, nombre="Mayorista Norte", productos=("libracargo",))
+    _asignar(consola, sur, "ventalibra", "acme")
+    _asignar(consola, norte, "libracargo", "flete")
+    return sur, norte
+
+
+def test_cada_revendedor_ve_solo_lo_suyo(consola):
+    sur, norte = _dos_revendedores(consola)
+    filas = consola.get("/api/panel-revendedor/clientes", headers=_credencial(consola, sur)).json()["clientes"]
+    assert [(f["producto"], f["slug"]) for f in filas] == [("ventalibra", "acme")]
+    filas = consola.get("/api/panel-revendedor/clientes", headers=_credencial(consola, norte)).json()["clientes"]
+    assert [(f["producto"], f["slug"]) for f in filas] == [("libracargo", "flete")]
+
+
+def test_ninguna_ruta_acepta_un_identificador_de_revendedor(consola):
+    """Quién pregunta sale de la credencial: no hay parámetro para pedir a otro."""
+    sur, norte = _dos_revendedores(consola)
+    cabecera = _credencial(consola, sur)
+    filas = consola.get("/api/panel-revendedor/clientes", params={"id": norte, "revendedor": norte}, headers=cabecera)
+    assert [f["slug"] for f in filas.json()["clientes"]] == ["acme"]
+    assert consola.get(f"/api/panel-revendedor/clientes/{norte}", headers=cabecera).status_code in (404, 405)
+
+
+@pytest.mark.parametrize("cabecera", [{}, {"X-Revendedor-Credencial": ""}, {"X-Revendedor-Credencial": "inventada"}])
+def test_sin_credencial_valida_no_entra(tmp_path, consola, cabecera):
+    sur, _ = _dos_revendedores(consola)
+    _credencial(consola, sur)
+    sin_sesion = TestClient(consola.app, base_url="https://testserver")
+    assert sin_sesion.get("/api/panel-revendedor/clientes", headers=cabecera).status_code == 401
+    assert sin_sesion.get("/api/panel-revendedor/yo", headers=cabecera).status_code == 401
+
+
+def test_la_credencial_no_abre_la_consola(consola):
+    sur, _ = _dos_revendedores(consola)
+    cabecera = _credencial(consola, sur)
+    sin_sesion = TestClient(consola.app, base_url="https://testserver")
+    assert sin_sesion.get("/api/revendedores", headers=cabecera).status_code == 401
+    assert sin_sesion.post(f"/api/revendedores/{sur}/bloquear", headers=cabecera, json={}).status_code == 401
+
+
+def test_generar_otra_corta_la_anterior(consola):
+    sur, _ = _dos_revendedores(consola)
+    vieja = _credencial(consola, sur)
+    nueva = _credencial(consola, sur)
+    assert consola.get("/api/panel-revendedor/yo", headers=vieja).status_code == 401
+    assert consola.get("/api/panel-revendedor/yo", headers=nueva).status_code == 200
+
+
+def test_se_guarda_la_huella_y_nunca_la_credencial(consola, tmp_path):
+    sur, _ = _dos_revendedores(consola)
+    credencial = _credencial(consola, sur)["X-Revendedor-Credencial"]
+    guardado = (tmp_path / "credenciales-panel.json").read_text(encoding="utf-8")
+    assert credencial not in guardado
+    assert credencial not in (tmp_path / "revendedores.json").read_text(encoding="utf-8")
+    assert "credencial" not in consola.get(f"/api/revendedores/{sur}").text.replace("credencial del panel generada", "")
+
+
+def test_no_viaja_lo_que_es_del_dueno(consola):
+    sur, _ = _dos_revendedores(consola)
+    consola.put(f"/api/revendedores/{sur}", json={"nombre": "Distribuidora Sur", "notas": "nota privada del dueño",
+                                                  "productos": ["ventalibra"]})
+    _bloquear(consola, sur)
+    cabecera = _credencial(consola, sur)
+    yo = consola.get("/api/panel-revendedor/yo", headers=cabecera)
+    assert set(yo.json()) == {"nombre", "estado", "productos"} and yo.json()["estado"] == "bloqueado"
+    clientes = consola.get("/api/panel-revendedor/clientes", headers=cabecera).text
+    assert "nota privada" not in yo.text + clientes and "historial" not in yo.text + clientes
+    assert set(consola.get("/api/panel-revendedor/clientes", headers=cabecera).json()["clientes"][0]) == {
+        "producto", "producto_nombre", "slug", "nombre", "domain", "plan", "servicio_estado"}
+
+
+def test_un_backoffice_caido_no_se_lee_como_activo(consola, transporte):
+    sur, _ = _dos_revendedores(consola)
+    cabecera = _credencial(consola, sur)
+    del transporte.transportes["ventalibra-admin"]
+    fila = consola.get("/api/panel-revendedor/clientes", headers=cabecera).json()["clientes"][0]
+    assert fila["slug"] == "acme" and fila["servicio_estado"] is None
+
+
+def test_la_ruta_del_panel_no_existe_en_un_backoffice_de_producto(tmp_path, venta):
+    with _cliente_de_producto(tmp_path, venta, consola_token=TOKEN_CONSOLA) as c:
+        assert c.get("/api/panel-revendedor/yo", headers={"X-Revendedor-Credencial": "x"}).status_code == 404
