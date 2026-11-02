@@ -38,7 +38,9 @@ from .cliente_instancia import ClienteInstancia
 from .inventario import construir_inventario
 from .almacen_revendedores import AlmacenDeRevendedores
 from .cliente_consola import ClienteConsola
-from .routers import apariencia, auth, config_instancia, consola, instancias, marca, revendedores, salud, seguridad
+from .routers import (
+    apariencia, auth, config_instancia, consola, instancias, marca, panel_revendedor, revendedores, salud, seguridad,
+)
 from .settings import Settings, cargar_settings
 from .tema_suite import AlmacenDeTema
 
@@ -154,6 +156,7 @@ def create_app(
     app.include_router(salud.router)
     app.include_router(consola.router)
     app.include_router(revendedores.router)
+    app.include_router(panel_revendedor.router)
 
     _montar_frontend(app, frontend_dist)
     return app
